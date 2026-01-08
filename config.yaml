@@ -9,7 +9,7 @@ ksef:
         value: "FA"
 
 sqlite:
-    db_path: "data/ksef-integration-test.sqlite"
+    db_path: "data/ksef-integration-test.db"
 
 runonce:
     xml_path: ""

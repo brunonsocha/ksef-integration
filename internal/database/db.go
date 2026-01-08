@@ -17,10 +17,15 @@ func Connect(dbPath string) (*sql.DB, error) {
 		}
 	}
 	os.Create(dbPath)
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 	return db, nil
 }
 
+func Setup(db *sql.DB) error {
+	stmt := "CREATE TABLE IF NOT EXISTS Invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, external_id TEXT NOT NULL, raw_json TEXT, status TEXT NOT NULL DEFAULT 'PENDING', ksef_id TEXT, ksef_error TEXT, attempt_count INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+	_, err := db.Exec(stmt)
+	return err
+}

@@ -29,5 +29,9 @@ func main() {
 		return
 	}
 	infoLog.Printf("Połączono z bazą danych")
+	if err = database.Setup(db); err != nil {
+		errorLog.Fatal(err)
+	}
+	infoLog.Printf("Załadowano bazę danych")
 	defer db.Close()
 }

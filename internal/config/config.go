@@ -21,6 +21,9 @@ type Config struct {
 	Sqlite struct {
 		Db_path string `yaml:"db_path"`
 	} `yaml:"sqlite"`
+	Server struct {
+		Port string `yaml:"port"`
+	}
 	Runonce struct {
 		Xml_path string `yaml:"xml_path"`
 	} `yaml:"runonce"`

@@ -11,5 +11,8 @@ ksef:
 sqlite:
     db_path: "data/ksef-integration-test.db"
 
+server:
+    port: "8080"
+
 runonce:
     xml_path: ""

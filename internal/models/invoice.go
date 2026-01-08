@@ -2,7 +2,6 @@ package models
 
 import (
 	"database/sql"
-	"encoding/json"
 	"time"
 )
 
@@ -31,9 +30,18 @@ type InvoiceModel struct {
 }
 
 func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int, error) {
-	stmt := "INSERT INTO Invoices(external_id, raw_json) VALUES (?, ?) RETURNING id;"
+	// handling this here instead of the http handler due to the planned cli integration
+	now := time.Now()
+	if inv.CreatedAt.IsZero() {
+		inv.CreatedAt = now
+	}
+	inv.UpdatedAt = now
+	if inv.Status == "" {
+		inv.Status = StatusPending
+	}
+	stmt := "INSERT INTO Invoices(external_id, raw_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?) RETURNING id;"
 	var invId int
-	err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson).Scan(&invId)
+	err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status, inv.CreatedAt, inv.UpdatedAt).Scan(&invId)
 	if err != nil {
 		return 0, err
 	}
@@ -41,12 +49,13 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int, error) {
 	return invId, nil
 }
 
+// to fix: this will crash if ksef_id or ksef_error are NULL
 func (m *InvoiceModel) GetInvoice(id int) (*Invoice, error) {
-	stmt := "SELECT external_id, raw_json, status, ksef_id, ksef_err, attempt_count, created_at, updated_at FROM Invoices WHERE Id = ?"
+	stmt := "SELECT external_id, raw_json, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices WHERE Id = ?"
 	inv := &Invoice {Id: id}
 	err := m.DB.QueryRow(stmt, id).Scan(&inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return inv
+	return inv, nil
 }

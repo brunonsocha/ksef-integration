@@ -1,0 +1,15 @@
+ksef:
+    nip: "6793194113"
+    url: "https://ksef-text.mf.gov.pl/api"
+    token_path: ""
+    public_key_path: ""
+    form:
+        system_code: "FA (3)"
+        schema_version: "1-0E"
+        value: "FA"
+
+sqlite:
+    db_path: "data/ksef-integration-test.sqlite"
+
+runonce:
+    xml_path: ""

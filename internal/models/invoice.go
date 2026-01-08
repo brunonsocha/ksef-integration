@@ -14,15 +14,15 @@ const (
 	StatusFailed InvoiceStatus = "FAILED")
 
 type Invoice struct {
-	Id int // or uint64? will have to mention capacity
-	ExternalId string
-	RawJson string
-	Status InvoiceStatus
-	KsefId string
-	KsefErr string
-	AttemptCount int // should i just use uint8 here and mention that max attempt count is 255?
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Id int `json:"id"` // or uint64? will have to mention capacity
+	ExternalId string `json:"external_id"`
+	RawJson string `json:"-"`
+	Status InvoiceStatus `json:"status"`
+	KsefId *string `json:"ksef_id"` // allows nil
+	KsefErr *string `json:"ksef_error"` // allows nil
+	AttemptCount int `json:"attempt_count"`// should i just use uint8 here and mention that max attempt count is 255?
+	CreatedAt time.Time `json:"created_at`
+	UpdatedAt time.Time `json:"updated_at`
 }
 
 type InvoiceModel struct {
@@ -36,20 +36,18 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int, error) {
 		inv.CreatedAt = now
 	}
 	inv.UpdatedAt = now
-	if inv.Status == "" {
-		inv.Status = StatusPending
-	}
-	stmt := "INSERT INTO Invoices(external_id, raw_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?) RETURNING id;"
-	var invId int
-	err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status, inv.CreatedAt, inv.UpdatedAt).Scan(&invId)
+	inv.KsefErr = nil
+	inv.KsefId = nil
+	inv.AttemptCount = 0
+	inv.Status = StatusPending
+	stmt := "INSERT INTO Invoices(external_id, raw_json, status) VALUES (?, ?, ?) RETURNING id, created_at, updated_at;"
+	err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt)
 	if err != nil {
 		return 0, err
 	}
-	inv.Id = invId
-	return invId, nil
+	return inv.Id, nil
 }
 
-// to fix: this will crash if ksef_id or ksef_error are NULL
 func (m *InvoiceModel) GetInvoice(id int) (*Invoice, error) {
 	stmt := "SELECT external_id, raw_json, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices WHERE Id = ?"
 	inv := &Invoice {Id: id}

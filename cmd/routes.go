@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"ksef-integration/internal/models"
 	"net/http"
 )
@@ -13,17 +14,23 @@ func (app *application) routes() http.Handler {
 }
 
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
-	var inv models.Invoice
-	err := json.NewDecoder(r.Body).Decode(&inv)
+	jsonBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		app.errorLog.Printf("Bad JSON format", "error", err)
+		app.errorLog.Printf("Can't read the JSON body: %v", err)
+	}
+
+
+	var inv models.Invoice
+	err = json.Unmarshal(jsonBody, &inv)
+	if err != nil {
+		app.errorLog.Printf("Bad JSON format: %v", err)
 		http.Error(w, "Bad JSON format", http.StatusBadRequest)
 		return
 	}
-	inv.Status = models.StatusPending
+	inv.RawJson = string(jsonBody)
 	id, err := app.invoices.InsertInvoice(&inv)
 	if err != nil {
-		app.errorLog.Printf("Database fail", "error", err)
+		app.errorLog.Printf("Database fail: %v", err)
 		http.Error(w, "Couldn't insert the invoice into the database", http.StatusBadGateway)
 		return
 	}

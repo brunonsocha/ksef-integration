@@ -1,7 +1,6 @@
 package ksef
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ type ChallengeResponse struct {
 	TimestampMs int64 `json:"timestampMs"`
 }
 
+// i'm sure this code can be prettier. will refactor.
 func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	posturl := c.ApiURL + "/auth/challenge"
 	r, err := http.NewRequest("POST", posturl, nil)
@@ -29,11 +29,8 @@ func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	}
 	defer response.Body.Close()
 	
-	if response.StatusCode == http.StatusBadRequest {
-		return nil, fmt.Errorf("Nie można było wykonać żądania.")
-	}
-	if response.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("Za dużo żądań.")
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Wystąpił błąd - KSeF zwrócił odpowiedź o kodzie %d.", response.StatusCode)
 	}
 
 	var cha ChallengeResponse

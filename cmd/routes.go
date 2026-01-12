@@ -16,22 +16,22 @@ func (app *application) routes() http.Handler {
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	jsonBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		app.errorLog.Printf("Can't read the JSON body: %v", err)
+		app.errorLog.Printf("Nie można odczytać JSON", err)
 	}
 
 
 	var inv models.Invoice
 	err = json.Unmarshal(jsonBody, &inv)
 	if err != nil {
-		app.errorLog.Printf("Bad JSON format: %v", err)
-		http.Error(w, "Bad JSON format", http.StatusBadRequest)
+		app.errorLog.Printf("Zły format JSON: %v", err)
+		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
 	}
 	inv.RawJson = string(jsonBody)
 	id, err := app.invoices.InsertInvoice(&inv)
 	if err != nil {
-		app.errorLog.Printf("Database fail: %v", err)
-		http.Error(w, "Couldn't insert the invoice into the database", http.StatusBadGateway)
+		app.errorLog.Printf("Błąd bazy danych: %v", err)
+		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)

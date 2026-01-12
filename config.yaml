@@ -1,7 +1,7 @@
 ksef:
     nip: "6793194113"
-    url: "https://ksef-text.mf.gov.pl/api"
-    token_path: ""
+    url: "https://api-test.ksef.mf.gov.pl/v2"
+    token_path: "./token.txt"
     public_key_path: ""
     form:
         system_code: "FA (3)"

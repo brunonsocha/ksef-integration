@@ -45,7 +45,7 @@ func main() {
 			DB: db,
 		},
 	}
-
+	go app.startSender()
 	srv := &http.Server{
 		Addr: ":" + cfg.Server.Port,
 		Handler: app.routes(),

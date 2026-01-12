@@ -27,6 +27,9 @@ type Config struct {
 	Runonce struct {
 		Xml_path string `yaml:"xml_path"`
 	} `yaml:"runonce"`
+	User struct {
+		Max_retries int `yaml:"max_retries"`
+	} `yaml:"user"`
 }
 
 func Load(path string) (*Config, error) {

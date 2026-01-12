@@ -14,7 +14,7 @@ const (
 	StatusFailed InvoiceStatus = "FAILED")
 
 type Invoice struct {
-	Id int `json:"id"` // or uint64? will have to mention capacity
+	Id int64 `json:"id"` // changed it to int64 - sqlite uses int64 for ids with autoincrement
 	ExternalId string `json:"external_id"`
 	RawJson string `json:"-"`
 	Status InvoiceStatus `json:"status"`
@@ -29,13 +29,12 @@ type InvoiceModel struct {
 	DB *sql.DB
 }
 
-func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int, error) {
+func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 	// handling this here instead of the http handler due to the planned cli integration
-	now := time.Now()
 	if inv.CreatedAt.IsZero() {
-		inv.CreatedAt = now
+		inv.CreatedAt = time.Now()
 	}
-	inv.UpdatedAt = now
+	inv.UpdatedAt = time.Now()
 	inv.KsefErr = nil
 	inv.KsefId = nil
 	inv.AttemptCount = 0
@@ -48,12 +47,44 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int, error) {
 	return inv.Id, nil
 }
 
-func (m *InvoiceModel) GetInvoice(id int) (*Invoice, error) {
-	stmt := "SELECT external_id, raw_json, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices WHERE Id = ?"
-	inv := &Invoice {Id: id}
-	err := m.DB.QueryRow(stmt, id).Scan(&inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
+func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
+	// can't think of an edgecase in which replacing the given id with the scanned one could cause problems.
+	// added a limit 1 t obe consistent
+	stmt := "SELECT * FROM Invoices WHERE Id = ? LIMIT 1"
+	inv := &Invoice{}
+	err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return inv, nil
+}
+
+func (m *InvoiceModel) GetPendingInvoice() (*Invoice, error) {
+	stmt := "SELECT * FROM Invoices WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 1"
+	inv := &Invoice{}
+	err := m.DB.QueryRow(stmt).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
+	if err != nil {
+		return nil, err // have to make sure the process checks whether this is ErrNoRows, if yes, it shouldn't crash - just stop working
+	}
+	return inv, nil
+}
+
+// could just create one singular function that accepts id, ksefErr and ksefId - pass string pointers - and the result will be the same, if the pointer is nil, the update will apply a NULL in the database
+
+func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId string) error {
+	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, StatusSent, ksefId, time.Now(), time.Now())
+	return err
+}
+
+func (m *InvoiceModel) UpdateRetryInvoice(id int64, ksefErr string) error {
+	stmt := "UPDATE Invoices SET status = ?, attempt_count = attempt_count + 1, ksef_error = ?, updated_at = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, StatusRetry, ksefErr, time.Now(), time.Now())
+	return err
+}
+
+func (m *InvoiceModel) UpdateFailedInvoice(id int64, ksefErr string) error {
+	stmt := "UPDATE Invoices SET status = ?, ksef_error = ?, updated_at = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, StatusFailed, ksefErr, time.Now(), id)
+	return err
 }

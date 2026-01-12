@@ -16,3 +16,6 @@ server:
 
 runonce:
     xml_path: ""
+
+user:
+    max_retries: 5

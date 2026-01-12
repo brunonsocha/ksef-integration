@@ -32,6 +32,33 @@ type AuthenticationResponse struct {
 	} `json:"authenticationToken"`
 }
 
+type RedeemResponse struct {
+	AccessToken struct {
+		Token string `json:"token"`
+		ValidUntil string `json:"validUntil"`
+	} `json:"accessToken"`
+	RefreshToken struct {
+		Token string `json:"token"`
+		ValidUntil string `json:"validUntil"`
+	}
+}
+
+type InteractiveSessionPayload struct {
+	FormCode struct {
+		SystemCode string `json:"systemCode"`
+		SchemaVersion string `json:"schemaVersion"`
+		Value string `json:"value"`
+	} `json:"formCode"`
+	Encryption struct {
+		EncryptedSymmetricKey string `json:"encryptedSymmetricKey"`
+		InitializationVector string `json:"initializationVector"`
+	} `json:"encryption"`
+}
+
+type InteractiveSessionResponse struct {
+
+}
+
 // i'm sure this code can be prettier. will refactor.
 func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	posturl := c.ApiURL + "/auth/challenge"
@@ -108,6 +135,36 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 	return &authRes, nil
 }
 
+func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, error) {
+	posturl := c.ApiURL + "/auth/token/redeem"
+	r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set("Accept", "application/json")
+	r.Header.Set("Authorization", "Bearer " + authRes.AuthenticationToken.Token)
+	r.Header.Set("Content-Type", "application/json")
+	response, err := c.httpClient.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("Wystąpił błąd - KSeF nie zwrócił tokena - %d - %s", response.StatusCode, body)
+	}
+	var redeemRes RedeemResponse
+	responseJson, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
+	}
+	err = json.Unmarshal(responseJson, &redeemRes)
+	if err != nil {
+		return nil, err
+	}
+	return &redeemRes, nil
+}
+
 func (c *Client) Login() error {
 	cha, err := c.getChallenge()
 	if err != nil {
@@ -121,6 +178,13 @@ func (c *Client) Login() error {
 	if err != nil {
 		return err
 	}
-	c.SessionToken = authRes.AuthenticationToken.Token
+	// maybe use a loop to not always wait for 5 seconds?
+	time.Sleep(time.Second * 3)
+	redeemRes, err := c.redeemToken(authRes)
+	if err != nil {
+		return err
+	}
+	c.SessionToken = redeemRes.AccessToken.Token
+	c.RefreshToken = redeemRes.RefreshToken.Token
 	return nil
 }

@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 	infoLog.Printf("Wczytano plik konfiguracyjny")
-	ksefClient := ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token_path, cfg.Ksef.Public_key_path, cfg.Ksef.Url)
+	ksefClient := ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token, cfg.Ksef.Public_key_path, cfg.Ksef.Url)
 
 	err = ksefClient.Login()
 	if err != nil {

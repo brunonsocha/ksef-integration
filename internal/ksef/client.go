@@ -12,6 +12,7 @@ type Client struct {
 	ApiURL string
 	httpClient *http.Client
 	SessionToken string
+	RefreshToken string
 }
 
 func NewClient(nip, apiToken, publicKeyPath, apiURL string) *Client {

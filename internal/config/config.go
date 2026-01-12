@@ -10,7 +10,7 @@ type Config struct {
 	Ksef struct {
 		Nip string `yaml:"nip"`
 		Url string `yaml:"url"`
-		Token_path string `yaml:"token_path"`
+		Token string `yaml:"token"`
 		Public_key_path string `yaml:"public_key_path"`
 		Form struct {
 			System_code string `yaml:"system_code"`

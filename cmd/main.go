@@ -3,10 +3,11 @@ package main
 import (
 	"ksef-integration/internal/config"
 	"ksef-integration/internal/database"
+	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"log"
-	"os"
 	"net/http"
+	"os"
 
 	_ "modernc.org/sqlite"
 )
@@ -16,6 +17,7 @@ type application struct {
 	errorLog *log.Logger
 	invoices *models.InvoiceModel
 	config *config.Config
+	ksefClient *ksef.Client
 }
 
 func main() {	
@@ -27,6 +29,14 @@ func main() {
 		return
 	}
 	infoLog.Printf("Wczytano plik konfiguracyjny")
+	ksefClient := ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token_path, cfg.Ksef.Public_key_path, cfg.Ksef.Url)
+
+	err = ksefClient.Login()
+	if err != nil {
+		errorLog.Fatal(err)
+		return
+	}
+	infoLog.Printf("Zalogowano do KSeF!")
 	db, err := database.Connect(cfg.Sqlite.Db_path)
 	if err != nil {
 		errorLog.Fatal(err)
@@ -34,16 +44,20 @@ func main() {
 	}
 	defer db.Close()
 	infoLog.Printf("Połączono z bazą danych")
+	// need to use this syntax more often...
 	if err = database.Setup(db); err != nil {
 		errorLog.Fatal(err)
 	}
 	infoLog.Printf("Załadowano bazę danych")
+
 	app := &application{
 		infoLog: infoLog,
 		errorLog: errorLog,
 		invoices: &models.InvoiceModel{
 			DB: db,
 		},
+		config: cfg,
+		ksefClient: ksefClient,
 	}
 	go app.startSender()
 	srv := &http.Server{

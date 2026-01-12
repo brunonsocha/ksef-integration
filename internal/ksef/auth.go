@@ -108,4 +108,19 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 	return &authRes, nil
 }
 
-
+func (c *Client) Login() error {
+	cha, err := c.getChallenge()
+	if err != nil {
+		return err
+	}
+	encryptedToken, err := c.encryptToken(cha)
+	if err != nil {
+		return err
+	}
+	authRes, err := c.startSession(encryptedToken, cha)
+	if err != nil {
+		return err
+	}
+	c.SessionToken = authRes.AuthenticationToken.Token
+	return nil
+}

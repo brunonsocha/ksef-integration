@@ -18,11 +18,11 @@ func (c *Client) readPublicKey() (*rsa.PublicKey, error) {
 	}
 	// we'll ignore the "rest"
 	block, _ := pem.Decode(keyBytes)
-	keyIfc, err := x509.ParsePKIXPublicKey(block.Bytes)
+	keyIfc, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return nil, err
 	}
-	key, ok := keyIfc.(*rsa.PublicKey)
+	key, ok := keyIfc.PublicKey.(*rsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("Wystąpił błąd w trakcie odczytywania klucza publicznego.")
 	}

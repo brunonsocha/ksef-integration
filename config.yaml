@@ -2,7 +2,7 @@ ksef:
     nip: "6793194113"
     url: "https://api-test.ksef.mf.gov.pl/v2"
     token_path: "./token.txt"
-    public_key_path: ""
+    public_key_path: "./keys/public_key.pem"
     form:
         system_code: "FA (3)"
         schema_version: "1-0E"

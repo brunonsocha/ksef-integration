@@ -16,7 +16,7 @@ func Connect(dbPath string) (*sql.DB, error) {
 			return nil, err
 		}
 	}
-	os.Create(dbPath)
+	// creating the file each time wiped the database
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err

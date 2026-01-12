@@ -26,12 +26,20 @@ func (app *application) startSender() {
 		ok := true
 
 		if ok {
+			err := app.invoices.UpdateSentInvoice(inv.Id, "ksefidmock")
+			if err != nil {
+				app.errorLog.Printf("Nie można znaleźć faktury: %v", err)
+				continue
+			}
 			app.infoLog.Printf("Pomyślnie wysłano fakturę - ID: %d", inv.Id)
-			app.invoices.UpdateSentInvoice(inv.Id, "ksefidmock")
 		} else {
 			if inv.AttemptCount >= app.config.User.Max_retries {
-				app.infoLog.Printf("Osiągnięto maksymalną ilość prób wysyłki faktury o ID: %d", inv.Id)
 				app.invoices.UpdateFailedInvoice(inv.Id, "kseferrmock")
+				if err != nil {
+					app.errorLog.Printf("Nie można znaleźć faktury: %v", err)
+					continue
+				}
+				app.infoLog.Printf("Osiągnięto maksymalną ilość prób wysyłki faktury o ID: %d", inv.Id)
 			} else {
 				app.infoLog.Printf("Ponawianie próby wysyłki faktury o ID: %d", inv.Id)
 			}

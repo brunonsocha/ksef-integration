@@ -10,7 +10,6 @@ type InvoiceStatus string
 const (
 	StatusPending InvoiceStatus = "PENDING"
 	StatusSent InvoiceStatus = "SENT"
-	StatusRetry InvoiceStatus = "RETRY"
 	StatusFailed InvoiceStatus = "FAILED")
 
 type Invoice struct {
@@ -60,9 +59,9 @@ func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 }
 
 func (m *InvoiceModel) GetPendingInvoice() (*Invoice, error) {
-	stmt := "SELECT * FROM Invoices WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 1"
+	stmt := "SELECT * FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT 1"
 	inv := &Invoice{}
-	err := m.DB.QueryRow(stmt).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
+	err := m.DB.QueryRow(stmt, StatusPending).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
 	if err != nil {
 		return nil, err // have to make sure the process checks whether this is ErrNoRows, if yes, it shouldn't crash - just stop working
 	}
@@ -73,13 +72,15 @@ func (m *InvoiceModel) GetPendingInvoice() (*Invoice, error) {
 
 func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId string) error {
 	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusSent, ksefId, time.Now(), time.Now())
+	_, err := m.DB.Exec(stmt, StatusSent, ksefId, time.Now(), id)
 	return err
 }
 
+// don't know whether there's a point in having a seperate status for retry - for frontend purposes? could just check whether attempt_count > 0
+
 func (m *InvoiceModel) UpdateRetryInvoice(id int64, ksefErr string) error {
-	stmt := "UPDATE Invoices SET status = ?, attempt_count = attempt_count + 1, ksef_error = ?, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusRetry, ksefErr, time.Now(), time.Now())
+	stmt := "UPDATE Invoices SET attempt_count = attempt_count + 1, ksef_error = ?, updated_at = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, ksefErr, time.Now(), id)
 	return err
 }
 

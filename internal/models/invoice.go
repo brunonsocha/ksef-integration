@@ -20,8 +20,8 @@ type Invoice struct {
 	KsefId *string `json:"ksef_id"` // allows nil
 	KsefErr *string `json:"ksef_error"` // allows nil
 	AttemptCount int `json:"attempt_count"`// should i just use uint8 here and mention that max attempt count is 255?
-	CreatedAt time.Time `json:"created_at`
-	UpdatedAt time.Time `json:"updated_at`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type InvoiceModel struct {
@@ -39,8 +39,7 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 	inv.AttemptCount = 0
 	inv.Status = StatusPending
 	stmt := "INSERT INTO Invoices(external_id, raw_json, status) VALUES (?, ?, ?) RETURNING id, created_at, updated_at;"
-	err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt)
-	if err != nil {
+	if err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return 0, err
 	}
 	return inv.Id, nil
@@ -51,8 +50,7 @@ func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 	// added a limit 1 t obe consistent
 	stmt := "SELECT * FROM Invoices WHERE Id = ? LIMIT 1"
 	inv := &Invoice{}
-	err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
-	if err != nil {
+	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return inv, nil
@@ -61,8 +59,7 @@ func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 func (m *InvoiceModel) GetPendingInvoice() (*Invoice, error) {
 	stmt := "SELECT * FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT 1"
 	inv := &Invoice{}
-	err := m.DB.QueryRow(stmt, StatusPending).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt)
-	if err != nil {
+	if err := m.DB.QueryRow(stmt, StatusPending).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return nil, err // have to make sure the process checks whether this is ErrNoRows, if yes, it shouldn't crash - just stop working
 	}
 	return inv, nil

@@ -11,8 +11,7 @@ import (
 func Connect(dbPath string) (*sql.DB, error) {
 	dirPath := filepath.Dir(dbPath)
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		err := os.MkdirAll(dirPath, 0755)
-		if err != nil {
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
 			return nil, err
 		}
 	}

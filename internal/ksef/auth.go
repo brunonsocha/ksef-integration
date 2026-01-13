@@ -35,18 +35,18 @@ type AuthenticationResponse struct {
 type RedeemResponse struct {
 	AccessToken struct {
 		Token string `json:"token"`
-		ValidUntil string `json:"validUntil"`
+		ValidUntil time.Time `json:"validUntil"`
 	} `json:"accessToken"`
 	RefreshToken struct {
 		Token string `json:"token"`
-		ValidUntil string `json:"validUntil"`
+		ValidUntil time.Time `json:"validUntil"`
 	}
 }
 
 type RefreshResponse struct {
 	AccessToken struct {
 		Token string `json:"token"`
-		ValidUntil string `json:"token"`
+		ValidUntil time.Time `json:"token"`
 	} `json:"accessToken"`
 }
 
@@ -90,8 +90,7 @@ func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
 	}
-	err = json.Unmarshal(jsonBody, &cha)
-	if err != nil {
+	if err = json.Unmarshal(jsonBody, &cha); err != nil {
 		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
 	}
 	return &cha, nil
@@ -135,8 +134,7 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 	if err != nil {
 		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
 	}
-	err = json.Unmarshal(responseJson, &authRes)
-	if err != nil {
+	if err = json.Unmarshal(responseJson, &authRes); err != nil {
 		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
 	}
 	return &authRes, nil
@@ -165,8 +163,7 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 			if err != nil {
 				return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
 			}
-			err = json.Unmarshal(responseJson, &redeemRes)
-			if err != nil {
+			if err = json.Unmarshal(responseJson, &redeemRes); err != nil {
 				return nil, err
 			}
 			return &redeemRes, nil
@@ -180,6 +177,33 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 
 	}
 	return nil, fmt.Errorf("Nie udało się pobrać tokena.")
+}
+
+func (c *Client) refreshToken() error {
+	if c.RefreshToken == "" {
+		return fmt.Errorf("Nie można było znaleźć tokena do odświeżenia.")
+	}
+	posturl := c.ApiURL + "/auth/token/refresh"
+	r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	r.Header.Set("Accept", "application/json")
+	r.Header.Set("Authorization", "Bearer " + c.RefreshToken)
+	r.Header.Set("Content-Type", "application/json")
+	response, err := c.httpClient.Do(r)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	var refreshRes RefreshResponse
+	responseJson, err := io.ReadAll(response.Body)
+	if err = json.Unmarshal(responseJson, &refreshRes); err != nil {
+		return fmt.Errorf("Nie można było odczytać odpowiedzi na refresh request.")
+	}
+	c.SessionToken = refreshRes.AccessToken.Token
+	c.SessionTokenValidity = refreshRes.AccessToken.ValidUntil
+	return nil
 }
 
 func (c *Client) Login() error {
@@ -200,6 +224,18 @@ func (c *Client) Login() error {
 		return err
 	}
 	c.SessionToken = redeemRes.AccessToken.Token
+	c.SessionTokenValidity = redeemRes.AccessToken.ValidUntil
 	c.RefreshToken = redeemRes.RefreshToken.Token
+	c.RefreshTokenValidity = redeemRes.RefreshToken.ValidUntil
+	return nil
+}
+
+// ill either have to call this every time i try to send an invoice, or create a function wrapper for sending requests
+func (c *Client) CheckToken() error {
+	if time.Until(c.SessionTokenValidity) < 2*time.Minute {
+		if err := c.refreshToken(); err != nil {
+			return c.Login()
+		}
+	}
 	return nil
 }

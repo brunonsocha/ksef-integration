@@ -43,6 +43,13 @@ type RedeemResponse struct {
 	}
 }
 
+type RefreshResponse struct {
+	AccessToken struct {
+		Token string `json:"token"`
+		ValidUntil string `json:"token"`
+	} `json:"accessToken"`
+}
+
 type InteractiveSessionPayload struct {
 	FormCode struct {
 		SystemCode string `json:"systemCode"`
@@ -136,33 +143,43 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 }
 
 func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, error) {
+	// this function goes too fast. should remove the sleep in the Login function and implement a loop here
 	posturl := c.ApiURL + "/auth/token/redeem"
-	r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
-	if err != nil {
-		return nil, err
+	for i := 0; i < 10; i++ {
+		r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
+		
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Accept", "application/json")
+		r.Header.Set("Authorization", "Bearer " + authRes.AuthenticationToken.Token)
+		r.Header.Set("Content-Type", "application/json")
+		response, err := c.httpClient.Do(r)
+		if err != nil {
+			return nil, err
+		}
+		if response.StatusCode == http.StatusOK {
+			defer response.Body.Close()
+			var redeemRes RedeemResponse
+			responseJson, err := io.ReadAll(response.Body)
+			if err != nil {
+				return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
+			}
+			err = json.Unmarshal(responseJson, &redeemRes)
+			if err != nil {
+				return nil, err
+			}
+			return &redeemRes, nil
+		}
+		response.Body.Close()
+		if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusTooManyRequests {
+			time.Sleep(time.Second * 2)
+			continue
+		}
+		return nil, fmt.Errorf("KSeF nie zwrócił tokena - błąd %d", response.StatusCode)
+
 	}
-	r.Header.Set("Accept", "application/json")
-	r.Header.Set("Authorization", "Bearer " + authRes.AuthenticationToken.Token)
-	r.Header.Set("Content-Type", "application/json")
-	response, err := c.httpClient.Do(r)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		return nil, fmt.Errorf("Wystąpił błąd - KSeF nie zwrócił tokena - %d - %s", response.StatusCode, body)
-	}
-	var redeemRes RedeemResponse
-	responseJson, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
-	}
-	err = json.Unmarshal(responseJson, &redeemRes)
-	if err != nil {
-		return nil, err
-	}
-	return &redeemRes, nil
+	return nil, fmt.Errorf("Nie udało się pobrać tokena.")
 }
 
 func (c *Client) Login() error {
@@ -178,8 +195,6 @@ func (c *Client) Login() error {
 	if err != nil {
 		return err
 	}
-	// maybe use a loop to not always wait for 5 seconds?
-	time.Sleep(time.Second * 3)
 	redeemRes, err := c.redeemToken(authRes)
 	if err != nil {
 		return err

@@ -231,11 +231,20 @@ func (c *Client) Login() error {
 }
 
 // ill either have to call this every time i try to send an invoice, or create a function wrapper for sending requests
-func (c *Client) CheckToken() error {
+func (c *Client) checkToken() error {
 	if time.Until(c.SessionTokenValidity) < 2*time.Minute {
 		if err := c.refreshToken(); err != nil {
 			return c.Login()
 		}
 	}
 	return nil
+}
+
+// this will be used instead of c.httpClient.Do
+func (c *Client) ExecuteRequestTokenCheck(r *http.Request) (*http.Response, error) {
+	if err := c.checkToken(); err != nil {
+		return nil, err
+	}
+	r.Header.Set("Authorization", "Bearer " + c.SessionToken)
+	return c.httpClient.Do(r)
 }

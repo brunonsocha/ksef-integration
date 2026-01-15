@@ -50,22 +50,6 @@ type RefreshResponse struct {
 	} `json:"accessToken"`
 }
 
-type InteractiveSessionPayload struct {
-	FormCode struct {
-		SystemCode string `json:"systemCode"`
-		SchemaVersion string `json:"schemaVersion"`
-		Value string `json:"value"`
-	} `json:"formCode"`
-	Encryption struct {
-		EncryptedSymmetricKey string `json:"encryptedSymmetricKey"`
-		InitializationVector string `json:"initializationVector"`
-	} `json:"encryption"`
-}
-
-type InteractiveSessionResponse struct {
-
-}
-
 // i'm sure this code can be prettier. will refactor.
 func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	posturl := c.ApiURL + "/auth/challenge"

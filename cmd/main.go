@@ -23,7 +23,13 @@ type application struct {
 func main() {	
 	infoLog := log.New(os.Stdout, "[INFO]\t", log.Ltime)
 	errorLog := log.New(os.Stderr, "[BŁĄD]\t", log.Ltime)
-	cfg, err := config.Load("config.yaml")
+	f, err := os.Open("config.yaml")
+	if err != nil {
+		errorLog.Fatal(err)
+		return
+	}
+	defer f.Close()
+	cfg, err := config.Load(f)
 	if err != nil {
 		errorLog.Fatal(err)
 		return

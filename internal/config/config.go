@@ -1,7 +1,8 @@
 package config
 
 import (
-	"os"
+	"fmt"
+	"io"
 
 	"github.com/goccy/go-yaml"
 )
@@ -32,15 +33,12 @@ type Config struct {
 	} `yaml:"user"`
 }
 
-func Load(path string) (*Config, error) {
-	f, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+// supposedly, passing in filepaths is a codesmell
+func Load(f io.Reader) (*Config, error) {
 	var config Config
-	err = yaml.Unmarshal(f, &config)
-	if err != nil {
-		return nil, err
+	decoder := yaml.NewDecoder(f)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("Niepoprawna składnia pliku .yaml - %v", err)
 	}
 	return &config, nil
 }

@@ -37,12 +37,6 @@ func main() {
 	infoLog.Printf("Wczytano plik konfiguracyjny")
 	ksefClient := ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token, cfg.Ksef.Public_key_path, cfg.Ksef.Url)
 
-	err = ksefClient.Login()
-	if err != nil {
-		errorLog.Fatal(err)
-		return
-	}
-	infoLog.Printf("Zalogowano do KSeF!")
 	db, err := database.Connect(cfg.Sqlite.Db_path)
 	if err != nil {
 		errorLog.Fatal(err)
@@ -50,7 +44,6 @@ func main() {
 	}
 	defer db.Close()
 	infoLog.Printf("Połączono z bazą danych")
-	// need to use this syntax more often...
 	if err = database.Setup(db); err != nil {
 		errorLog.Fatal(err)
 	}

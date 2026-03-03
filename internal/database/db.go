@@ -20,6 +20,14 @@ func Connect(dbPath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	concurrencySafe := `PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;`
+	if _, err := db.Exec(concurrencySafe); err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 

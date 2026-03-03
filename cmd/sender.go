@@ -21,9 +21,7 @@ func (app *application) startSender() {
 			continue
 		}
 		app.infoLog.Printf("Odnaleziono fakturę - ID: %d", inv.Id)
-		time.Sleep(time.Second * 5)
-		// logika wysyłki
-		ok := true
+		ok := false
 
 		if ok {
 			err := app.invoices.UpdateSentInvoice(inv.Id, "ksefidmock")
@@ -34,15 +32,18 @@ func (app *application) startSender() {
 			app.infoLog.Printf("Pomyślnie wysłano fakturę - ID: %d", inv.Id)
 		} else {
 			if inv.AttemptCount >= app.config.User.Max_retries {
-				app.invoices.UpdateFailedInvoice(inv.Id, "kseferrmock")
-				if err != nil {
+				if err := app.invoices.UpdateFailedInvoice(inv.Id, "kseferrmock"); err != nil {
 					app.errorLog.Printf("Nie można znaleźć faktury: %v", err)
 					continue
 				}
 				app.infoLog.Printf("Osiągnięto maksymalną ilość prób wysyłki faktury o ID: %d", inv.Id)
 			} else {
 				app.infoLog.Printf("Ponawianie próby wysyłki faktury o ID: %d", inv.Id)
+				if err := app.invoices.UpdateRetryInvoice(inv.Id, "kseferrmock"); err != nil {
+					app.errorLog.Printf("Nie można znaleźć faktury: %v", err)
+				}
 			}
 		}
+		time.Sleep(time.Minute)
 	}
 }

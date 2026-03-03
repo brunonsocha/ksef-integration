@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
@@ -17,11 +16,13 @@ type ChallengeResponse struct {
 
 type AuthenticationPayload struct {
 	Challenge string `json:"challenge"`
-	ContextIdentifier struct {
-		Type string `json:"type"`
-		Value string `json:"value"`
-	} `json:"contextIdentifier"`
+	ContextIdentifier ContextIdentifier `json:"contextIdentifier"`
 	EncryptedToken string `json:"encryptedToken"`
+}
+
+type ContextIdentifier struct {
+	Type string `json:"type"`
+	Value string `json:"value"`
 }
 
 type AuthenticationResponse struct {
@@ -50,7 +51,6 @@ type RefreshResponse struct {
 	} `json:"accessToken"`
 }
 
-// i'm sure this code can be prettier. will refactor.
 func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	posturl := c.ApiURL + "/auth/challenge"
 	r, err := http.NewRequest("POST", posturl, nil)
@@ -58,24 +58,17 @@ func (c *Client) getChallenge() (*ChallengeResponse, error) {
 		return nil, err
 	}
 	r.Header.Set("Accept", "application/json")
-
 	response, err := c.httpClient.Do(r)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
-	
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Wystąpił błąd - KSeF zwrócił odpowiedź o kodzie %d.", response.StatusCode)
 	}
-
 	var cha ChallengeResponse
-	jsonBody, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
-	}
-	if err = json.Unmarshal(jsonBody, &cha); err != nil {
-		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
+	if err := json.NewDecoder(response.Body).Decode(&cha); err != nil {
+		return nil, err
 	}
 	return &cha, nil
 }
@@ -84,21 +77,17 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 	posturl := c.ApiURL + "/auth/ksef-token"
 	payload := AuthenticationPayload{
 		Challenge: cha.Challenge,
-		// anonymous struct used here, didn't want to pollute the top of the file with an additional struct to nest within another one
-		ContextIdentifier: struct {
-			Type string `json:"type"`
-			Value string `json:"value"`
-		}{
+		ContextIdentifier: ContextIdentifier{
 			Type: "Nip",
 			Value: c.NIP,
 		},
 		EncryptedToken: encryptedToken,
 	}
-	payloadJson, err := json.Marshal(payload)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(&payload); err != nil {
 		return nil, err
 	}
-	r, err := http.NewRequest("POST", posturl, bytes.NewBuffer(payloadJson))
+	r, err := http.NewRequest("POST", posturl, &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +98,17 @@ func (c *Client) startSession(encryptedToken string, cha *ChallengeResponse) (*A
 		return nil, err
 	}
 	defer response.Body.Close()
-
 	if response.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("Wystapił błąd - KSeF nie zaakceptował tokena - %d", response.StatusCode)
+		return nil, fmt.Errorf("Wystąpił błąd - KSeF nie zaakceptował tokena - odpowiedź o kodzie %d.", response.StatusCode)
 	}
 	var authRes AuthenticationResponse
-	responseJson, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
-	}
-	if err = json.Unmarshal(responseJson, &authRes); err != nil {
-		return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
+	if err := json.NewDecoder(response.Body).Decode(&authRes); err != nil {
+		return nil, err
 	}
 	return &authRes, nil
 }
 
 func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, error) {
-	// this function goes too fast. should remove the sleep in the Login function and implement a loop here
 	posturl := c.ApiURL + "/auth/token/redeem"
 	for i := 0; i < 10; i++ {
 		r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
@@ -143,11 +126,7 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 		if response.StatusCode == http.StatusOK {
 			defer response.Body.Close()
 			var redeemRes RedeemResponse
-			responseJson, err := io.ReadAll(response.Body)
-			if err != nil {
-				return nil, fmt.Errorf("Nie można było odczytać odpowiedzi.")
-			}
-			if err = json.Unmarshal(responseJson, &redeemRes); err != nil {
+			if err := json.NewDecoder(response.Body).Decode(&redeemRes); err != nil {
 				return nil, err
 			}
 			return &redeemRes, nil
@@ -180,10 +159,12 @@ func (c *Client) refreshToken() error {
 		return err
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("KSeF nie odświeżył tokena - błąd %d.", response.StatusCode)
+	}
 	var refreshRes RefreshResponse
-	responseJson, err := io.ReadAll(response.Body)
-	if err = json.Unmarshal(responseJson, &refreshRes); err != nil {
-		return fmt.Errorf("Nie można było odczytać odpowiedzi na refresh request.")
+	if err := json.NewDecoder(response.Body).Decode(&refreshRes); err != nil {
+		return err
 	}
 	c.SessionToken = refreshRes.AccessToken.Token
 	c.SessionTokenValidity = refreshRes.AccessToken.ValidUntil
@@ -214,7 +195,6 @@ func (c *Client) Login() error {
 	return nil
 }
 
-// ill either have to call this every time i try to send an invoice, or create a function wrapper for sending requests
 func (c *Client) checkToken() error {
 	if time.Until(c.SessionTokenValidity) < 2*time.Minute {
 		if err := c.refreshToken(); err != nil {

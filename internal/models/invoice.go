@@ -13,13 +13,13 @@ const (
 	StatusFailed InvoiceStatus = "FAILED")
 
 type Invoice struct {
-	Id int64 `json:"id"` // changed it to int64 - sqlite uses int64 for ids with autoincrement
+	Id int64 `json:"id"` 
 	ExternalId string `json:"external_id"`
-	RawJson string `json:"-"`
+	RawXml string `json:"-"`
 	Status InvoiceStatus `json:"status"`
-	KsefId *string `json:"ksef_id"` // allows nil
-	KsefErr *string `json:"ksef_error"` // allows nil
-	AttemptCount int `json:"attempt_count"`// should i just use uint8 here and mention that max attempt count is 255?
+	KsefId *string `json:"ksef_id"` 
+	KsefErr *string `json:"ksef_error"` 
+	AttemptCount int `json:"attempt_count"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -38,8 +38,8 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 	inv.KsefId = nil
 	inv.AttemptCount = 0
 	inv.Status = StatusPending
-	stmt := "INSERT INTO Invoices(external_id, raw_json, status) VALUES (?, ?, ?) RETURNING id, created_at, updated_at;"
-	if err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	stmt := "INSERT INTO Invoices(external_id, raw_xml, status) VALUES (?, ?, ?) RETURNING id, created_at, updated_at;"
+	if err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawXml, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return 0, err
 	}
 	return inv.Id, nil
@@ -50,7 +50,7 @@ func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 	// added a limit 1 t obe consistent
 	stmt := "SELECT * FROM Invoices WHERE Id = ? LIMIT 1"
 	inv := &Invoice{}
-	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return inv, nil
@@ -59,7 +59,7 @@ func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 func (m *InvoiceModel) GetPendingInvoice() (*Invoice, error) {
 	stmt := "SELECT * FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT 1"
 	inv := &Invoice{}
-	if err := m.DB.QueryRow(stmt, StatusPending).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	if err := m.DB.QueryRow(stmt, StatusPending).Scan(&inv.Id, &inv.ExternalId, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return nil, err // have to make sure the process checks whether this is ErrNoRows, if yes, it shouldn't crash - just stop working
 	}
 	return inv, nil

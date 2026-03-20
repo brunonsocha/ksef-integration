@@ -27,7 +27,7 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
 	}
-	inv.RawJson = string(jsonBody)
+	inv.RawXml = string(jsonBody)
 	id, err := app.invoices.InsertInvoice(&inv)
 	if err != nil {
 		app.errorLog.Printf("Błąd bazy danych: %v", err)

@@ -1,11 +1,13 @@
 package ksef
 
 import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -29,17 +31,40 @@ func (c *Client) readPublicKey() (*rsa.PublicKey, error) {
 	return key, nil
 }
 
-func (c *Client) encryptToken(cha *ChallengeResponse) (string, error) {
-	chaStr := fmt.Sprintf("%s|%d", c.ApiToken, cha.TimestampMs)
+func (c *Client) encryptWithPKey(aesKey []byte) ([]byte, error) {
 	hash := sha256.New()
 	key, err := c.readPublicKey()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	encryptedToken, err := rsa.EncryptOAEP(hash, rand.Reader, key, []byte(chaStr), nil)
+	encryptedData, err := rsa.EncryptOAEP(hash, rand.Reader, key, aesKey, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	// at this point i'm wondering whether it would be easier to work with byte slices instead of strings
-	return base64.StdEncoding.EncodeToString(encryptedToken), nil
+	return encryptedData, nil
+}
+
+//multiple of 16s
+func padPKCS(data []byte, blockSize int) []byte {
+	paddingLen := blockSize - (len(data) % blockSize)
+	padding := bytes.Repeat([]byte{byte(paddingLen)}, paddingLen)
+	return append(data, padding...)
+}
+
+func (c *Client) encryptCBC(text []byte) ([]byte, error) {
+	block, err := aes.NewCipher(c.InSessionAESKey)
+	if err != nil {
+		return nil, err
+	}
+	paddedData := padPKCS(text, aes.BlockSize)
+	ciphertxt := make([]byte, len(paddedData))
+	mode := cipher.NewCBCEncrypter(block, c.InSessionInitializationVector)
+	mode.CryptBlocks(ciphertxt, paddedData)
+	return ciphertxt, nil
+}
+
+func hashSHA256(data []byte) []byte {
+	h := sha256.New()
+	h.Write(data)
+	return h.Sum(nil)
 }

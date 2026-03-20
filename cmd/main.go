@@ -48,7 +48,6 @@ func main() {
 		errorLog.Fatal(err)
 	}
 	infoLog.Printf("Załadowano bazę danych")
-
 	app := &application{
 		infoLog: infoLog,
 		errorLog: errorLog,

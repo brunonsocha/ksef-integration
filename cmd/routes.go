@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"io"
+	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/http"
 )
@@ -14,26 +14,34 @@ func (app *application) routes() http.Handler {
 }
 
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
-	jsonBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		app.errorLog.Printf("Nie można odczytać JSON", err)
-	}
-
-
-	var inv models.Invoice
-	err = json.Unmarshal(jsonBody, &inv)
-	if err != nil {
+	var inv ksef.InvoiceReceived
+	if err := json.NewDecoder(r.Body).Decode(&inv); err != nil {
 		app.errorLog.Printf("Zły format JSON: %v", err)
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
 	}
-	inv.RawXml = string(jsonBody)
-	id, err := app.invoices.InsertInvoice(&inv)
+	if err := inv.ValidateInvoiceReceived(); err != nil {
+		app.errorLog.Printf("Niepoprawne dane w otrzymanej fakturze: %v", err)
+		http.Error(w, "Niepoprawne dane w otrzymanej fakturze", http.StatusUnprocessableEntity)
+		return
+	}
+	xmlcontent, err := ksef.TransformToXML(&inv)
+	if err != nil {
+		app.errorLog.Printf("Wystąpił błąd przy transformacji w XML: %v", err)
+		http.Error(w, "Błąd przy XML", http.StatusInternalServerError)
+		return
+	}
+	
+	dbInv := &models.Invoice{
+		ExternalId: inv.InvoiceNumber,
+		RawXml: string(xmlcontent),
+	}
+	id, err := app.invoices.InsertInvoice(dbInv)
 	if err != nil {
 		app.errorLog.Printf("Błąd bazy danych: %v", err)
 		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": inv.Status})
+	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": dbInv.Status})
 }

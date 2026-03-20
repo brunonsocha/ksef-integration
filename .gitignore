@@ -2,3 +2,4 @@ dbcon.sh
 token.txt
 data/*.db
 config.yaml
+*.json

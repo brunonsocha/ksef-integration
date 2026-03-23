@@ -193,15 +193,23 @@ func (c *Client) refreshToken() error {
 	return nil
 }
 
+func (c *Client) checkKeys() error {
+	if c.TokenPublicKey == nil || c.SessionPublicKey == nil {
+		return c.getBothKeys()
+	}
+	return nil
+}
+
 func (c *Client) Login() error {
+	if err := c.checkKeys(); err != nil {
+		return err
+	}
 	cha, err := c.getChallenge()
 	if err != nil {
 		return err
 	}
-	encryptedToken, err := c.encryptWithPKey([]byte(fmt.Sprintf("%s|%d", c.ApiToken, cha.TimestampMs)))
-	if err != nil {
-		return err
-	}
+	tokenData := []byte(fmt.Sprintf("%s|%d", c.ApiToken, cha.TimestampMs))
+	encryptedToken, err := c.encryptWithPKey(tokenData, c.TokenPublicKey)
 	authRes, err := c.startSession(encryptedToken, cha)
 	if err != nil {
 		return err
@@ -236,6 +244,9 @@ func (c *Client) ExecuteRequestTokenCheck(r *http.Request) (*http.Response, erro
 }
 
 func (c *Client) OpenInSession() error {
+	if err := c.checkKeys(); err != nil {
+		return err
+	}
 	aesKey := make([]byte, 32)
 	iv := make([]byte, 16)
 	if _, err := rand.Read(aesKey); err != nil {
@@ -244,7 +255,7 @@ func (c *Client) OpenInSession() error {
 	if _, err := rand.Read(iv); err != nil {
 		return fmt.Errorf("Błąd w generowaniu wektora inicjalizującego: %v", err)
 	}
-	encryptedKey, err := c.encryptWithPKey(aesKey)
+	encryptedKey, err := c.encryptWithPKey(aesKey, c.SessionPublicKey)
 	if err != nil {
 		return fmt.Errorf("Błąd przy enkrypcji klucza: %v", err)
 	}

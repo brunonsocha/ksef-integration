@@ -1,6 +1,7 @@
 package ksef
 
 import (
+	"crypto/rsa"
 	"net/http"
 	"time"
 )
@@ -8,7 +9,8 @@ import (
 type Client struct {
 	NIP string
 	ApiToken string
-	PublicKeyPath string
+	TokenPublicKey *rsa.PublicKey
+	SessionPublicKey *rsa.PublicKey
 	ApiURL string
 	httpClient *http.Client
 	SessionToken string
@@ -25,7 +27,6 @@ func NewClient(nip, apiToken, publicKeyPath, apiURL string) *Client {
 	return &Client{
 		NIP: nip,
 		ApiToken: apiToken,
-		PublicKeyPath: publicKeyPath,
 		ApiURL: apiURL,
 		httpClient: &http.Client{Timeout: time.Second * 100},
 	}

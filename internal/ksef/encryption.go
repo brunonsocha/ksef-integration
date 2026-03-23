@@ -8,35 +8,57 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/pem"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"os"
+	"net/http"
 )
 
-func (c *Client) readPublicKey() (*rsa.PublicKey, error) {
-	keyBytes, err := os.ReadFile(c.PublicKeyPath)
-	if err != nil {
-		return nil, err
-	}
-	// we'll ignore the "rest"
-	block, _ := pem.Decode(keyBytes)
-	keyIfc, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	key, ok := keyIfc.PublicKey.(*rsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("Wystąpił błąd w trakcie odczytywania klucza publicznego.")
-	}
-	return key, nil
+type KeysResponse struct {
+	Certificate string `json:"certificate"`
+	Usage []string `json:"usage"`
 }
 
-func (c *Client) encryptWithPKey(aesKey []byte) ([]byte, error) {
-	hash := sha256.New()
-	key, err := c.readPublicKey()
+func (c *Client) getBothKeys() error {
+	fullUrl := fmt.Sprintf("%s/security/public-key-certificates", c.ApiURL)
+	res, err := http.Get(fullUrl)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("KSeF nie zwrócił klucza - kod statusu: %v", res.StatusCode)
+	}
+	var keyRes []KeysResponse
+	if err := json.NewDecoder(res.Body).Decode(&keyRes); err != nil {
+		return err
+	}
+	for _, key := range keyRes {
+		certificateBytes, err := base64.StdEncoding.DecodeString(key.Certificate)
+		if err != nil {
+			continue
+		}
+		certificate, err := x509.ParseCertificate(certificateBytes)
+		if err != nil {
+			continue
+		}
+		pub := certificate.PublicKey.(*rsa.PublicKey)
+		for _, usage := range key.Usage {
+			if usage == "KsefTokenEncryption" {
+				c.TokenPublicKey = pub
+			} else if usage == "SymmetricKeyEncryption" {
+				c.SessionPublicKey = pub
+			}
+		}
+	}
+	if c.TokenPublicKey == nil || c.SessionPublicKey == nil {
+		return fmt.Errorf("Błąd przy pozyskiwaniu kluczy publicznych od KSeF.")
+	}
+	return nil
+}
+
+func (c *Client) encryptWithPKey(aesKey []byte, key *rsa.PublicKey) ([]byte, error) {
+	hash := sha256.New()
 	encryptedData, err := rsa.EncryptOAEP(hash, rand.Reader, key, aesKey, nil)
 	if err != nil {
 		return nil, err

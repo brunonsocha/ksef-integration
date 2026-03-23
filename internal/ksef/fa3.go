@@ -20,25 +20,24 @@ type Naglowek struct {
 
 type KodFormularza struct {
 	KodSystemowy string `xml:"kodSystemowy,attr"`
-	WersjaSchemy string `xml:"wersjaSchemy,attr`
+	WersjaSchemy string `xml:"wersjaSchemy,attr"`
 	Value string `xml:",chardata"`
 }
 
 type Podmiot1 struct {
-	PrefiksPodatnika string `xml:"PrefiksPodatnika,omitempty"`
-	NIP string `xml:"NIP"`
 	DaneIdentyfikacyjne DaneIdentyfikacyjne `xml:"DaneIdentyfikacyjne"`
 	Adres Adres `xml:"Adres"`
 }
 
 type Podmiot2 struct {
-	PrefiksNabywcy string `xml:"PrefiksNabywcy,omitempty"`
-	NIP string `xml:"NIP"`
 	DaneIdentyfikacyjne DaneIdentyfikacyjne `xml:"DaneIdentyfikacyjne"`
 	Adres *Adres `xml:"Adres"`
+	JST int `xml:"JST"`
+	GV int `xml:"GV"`
 }
 
 type DaneIdentyfikacyjne struct {
+	NIP string `xml:"NIP"`
 	Nazwa string `xml:"Nazwa"`
 }
 
@@ -52,8 +51,7 @@ type Fa struct {
 	KodWaluty string `xml:"KodWaluty"`
 	P_1 string `xml:"P_1"` // data wytworzenia
 	P_2 string `xml:"P_2"` // numer faktury
-	RodzajFaktury string `xml:"RodzajFaktury"`
-	FakturaKorygowana *FakturaKorygowana `xml:"FakturaKorygowana,omitempty"` // omijane jeśli nie KOR
+	P_6 string `xml:"P_6,omitempty"` // data sprzedazy
 	// taxbreakdowns
 	P_13_1 *string `xml:"P_13_1,omitempty"`
 	P_14_1 *string `xml:"P_14_1,omitempty"`
@@ -71,18 +69,48 @@ type Fa struct {
 	P_13_7 *string `xml:"P_13_7,omitempty"`
 	P_13_8 *string `xml:"P_13_8,omitempty"`
 	P_15 string `xml:"P_15"` // brutto
+	Adnotacje Adnotacje `xml:"Adnotacje"`
+	RodzajFaktury string `xml:"RodzajFaktury"`
+	PrzyczynaKorekty string `xml:"PrzyczynaKorekty,omitempty"`
+	TypKorekty int `xml:"TypKorekty,omitempty"`
+	DaneFaKorygowanej *DaneFaKorygowanej `xml:"DaneFaKorygowanej,omitempty"` // omijane jeśli nie KOR
 	FaWiersz []FaWiersz `xml:"FaWiersz"`
 }
 
-type FakturaKorygowana struct {
-	PrzyczynaKorekty string `xml:"PrzyczynaKorekty"`
+type Adnotacje struct {
+	P_16 int `xml:"P_16"`
+	P_17 int `xml:"P_17"`
+	P_18 int `xml:"P_18"`
+	P_18A int `xml:"P_18A"`
+	Zwolnienie ZwolnienieN `xml:"Zwolnienie"`
+	NoweSrodkiTransportu NoweSrodkiN `xml:"NoweSrodkiTransportu"`
+	P_23 int `xml:"P_23"`
+	PMarzy PMarzyN `xml:"PMarzy"`
+}
+
+type ZwolnienieN struct {
+	P_19N int `xml:"P_19N"`
+}
+
+type NoweSrodkiN struct {
+	P_22N int `xml:"P_22N"`
+}
+
+type PMarzyN struct {
+	P_PMarzyN int `xml:"P_PMarzyN"`
+}
+
+type DaneFaKorygowanej struct {
+	DataWystFaKorygowanej string `xml:"DataWystFaKorygowanej"`
 	NrFaKorygowanej string `xml:"NrFaKorygowanej"`
-	NrKSeF string `xml:"NrKSeF"`
+	NrKSeF int `xml:"NrKSeF"`
+	NrKSeFFaKorygowanej string `xml:"NrKSeFFaKorygowanej"`
 }
 
 type FaWiersz struct {
 	NrWierszaFa string `xml:"NrWierszaFa"`
-	P_7Z string `xml:"P_7Z"` // nazwa produktyu
+	UU_ID string `xml:"UU_ID"`
+	P_7 string `xml:"P_7"` // nazwa produktyu
 	P_8A *string `xml:"P_8A,omitempty"` // jednostka
 	P_8B *string `xml:"P_8B,omitempty"` // ilosc 
 	P_9A *string `xml:"P_9A,omitempty"` // cena netto/jednostka

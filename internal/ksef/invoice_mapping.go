@@ -99,8 +99,8 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			DataWytworzeniaFa: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		},
 		Podmiot1: Podmiot1{
-			NIP: inv.Seller.Nip,
 			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
+				NIP: inv.Seller.Nip,
 				Nazwa: *inv.Seller.Name,
 			},
 			Adres: Adres{
@@ -112,8 +112,25 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			KodWaluty: *inv.Currency,
 			P_1: inv.IssueDate,
 			P_2: inv.InvoiceNumber,
-			RodzajFaktury: string(inv.InvoiceType),
+			P_6: inv.IssueDate,
 			P_15: fmt.Sprintf("%.2f", inv.TotalAmount),
+			RodzajFaktury: string(inv.InvoiceType),
+			Adnotacje: Adnotacje{ // 2 is "nie dotyczy"
+				P_16: 2,
+				P_17: 2,
+				P_18: 2,
+				P_18A: 2,
+				P_23: 2,
+				Zwolnienie: ZwolnienieN{
+					P_19N: 1,
+				},
+				NoweSrodkiTransportu: NoweSrodkiN{
+					P_22N: 1,
+				},
+				PMarzy: PMarzyN{
+					P_PMarzyN: 1,
+				},
+			},
 		},
 	}
 	if inv.Seller.AddressLine2 != nil {
@@ -122,14 +139,16 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 
 	if inv.Buyer.Name != nil && inv.Buyer.AddressLine1 != nil {
 		fa.Podmiot2 = &Podmiot2{
-			NIP: inv.Buyer.Nip,
 			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
+				NIP: inv.Buyer.Nip,
 				Nazwa: *inv.Buyer.Name,
 			},
 			Adres: &Adres{
 				KodKraju: *inv.Buyer.CountryCode,
 				AdresL1: *inv.Buyer.AddressLine1,
 			},
+			JST: 2,
+			GV: 2,
 		}
 		if inv.Buyer.AddressLine2 != nil {
 			fa.Podmiot2.Adres.AdresL2 = *inv.Buyer.AddressLine2
@@ -140,7 +159,8 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 	for _, item := range inv.Items {
 		w := FaWiersz{
 			NrWierszaFa: fmt.Sprintf("%d", item.LineNumber),
-			P_7Z: item.Name,
+			UU_ID: fmt.Sprintf("item-%d", item.LineNumber),
+			P_7: item.Name,
 			P_11: fmt.Sprintf("%.2f", item.NetAmount),
 			P_12: string(item.TaxRate),
 		}
@@ -157,7 +177,16 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 		}
 		fa.Fa.FaWiersz = append(fa.Fa.FaWiersz, w)
 	}
-	
+	if inv.InvoiceType == InvoiceTypeKOR || inv.InvoiceType == InvoiceTypeKORZAL || inv.InvoiceType == InvoiceTypeKORROZ {
+		fa.Fa.PrzyczynaKorekty = *inv.CorrectionReason
+		fa.Fa.TypKorekty = 3
+		fa.Fa.DaneFaKorygowanej = &DaneFaKorygowanej{
+			DataWystFaKorygowanej: inv.IssueDate,
+			NrFaKorygowanej:       *inv.OriginalInvoiceNumber,
+			NrKSeF: 1,
+			NrKSeFFaKorygowanej:   *inv.OriginalKsefId,
+		}
+	}
 	for _, taxbr := range inv.TaxBreakdowns {
 		net := fmt.Sprintf("%.2f", taxbr.NetAmount)
 		var tax string

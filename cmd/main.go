@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"ksef-integration/internal/config"
 	"ksef-integration/internal/database"
 	"ksef-integration/internal/ksef"
@@ -8,6 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -57,11 +61,25 @@ func main() {
 		config: cfg,
 		ksefClient: ksefClient,
 	}
-	go app.startSender()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go app.startSender(ctx)
 	srv := &http.Server{
 		Addr: ":" + cfg.Server.Port,
 		Handler: app.routes(),
 	}
-	infoLog.Printf("Start serwera na porcie %s", srv.Addr)
-	srv.ListenAndServe()
+	go func(){
+		infoLog.Printf("Start serwera na porcie %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errorLog.Fatalf("Błąd aplikacji: %v", err)
+		}
+	}()
+	<- ctx.Done()
+	infoLog.Printf("Zatrzymywanie aplikacji...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		errorLog.Fatalf("Błąd przy zamykaniu aplikacji: %v", err)
+	}
+	infoLog.Printf("Zatrzymano aplikację.")
 }

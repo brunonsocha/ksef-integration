@@ -296,7 +296,6 @@ func (c *Client) OpenInSession() error {
 	c.InSessionAESKey = aesKey
 	c.InSessionInitializationVector = iv
 	c.InSessionValidity = inRes.ValidUntil
-	fmt.Println(c.InSessionRef)
 	return nil
 }
 

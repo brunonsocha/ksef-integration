@@ -22,6 +22,7 @@ type application struct {
 	invoices *models.InvoiceModel
 	config *config.Config
 	ksefClient *ksef.Client
+	renderer *renderer
 }
 
 func main() {	
@@ -39,8 +40,6 @@ func main() {
 		return
 	}
 	infoLog.Printf("Wczytano plik konfiguracyjny")
-	ksefClient := ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token, cfg.Ksef.Public_key_path, cfg.Ksef.Url)
-
 	db, err := database.Connect(cfg.Sqlite.Db_path)
 	if err != nil {
 		errorLog.Fatal(err)
@@ -59,7 +58,8 @@ func main() {
 			DB: db,
 		},
 		config: cfg,
-		ksefClient: ksefClient,
+		ksefClient: ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token, cfg.Ksef.Public_key_path, cfg.Ksef.Url),
+		renderer: newRenderer(),
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -69,17 +69,17 @@ func main() {
 		Handler: app.routes(),
 	}
 	go func(){
-		infoLog.Printf("Start serwera na porcie %s", srv.Addr)
+		app.infoLog.Printf("Start serwera na porcie %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errorLog.Fatalf("Błąd aplikacji: %v", err)
+			app.errorLog.Fatalf("Błąd aplikacji: %v", err)
 		}
 	}()
 	<- ctx.Done()
-	infoLog.Printf("Zatrzymywanie aplikacji...")
+	app.infoLog.Printf("Zatrzymywanie aplikacji...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		errorLog.Fatalf("Błąd przy zamykaniu aplikacji: %v", err)
+		app.errorLog.Fatalf("Błąd przy zamykaniu aplikacji: %v", err)
 	}
-	infoLog.Printf("Zatrzymano aplikację.")
+	app.infoLog.Printf("Zatrzymano aplikację.")
 }

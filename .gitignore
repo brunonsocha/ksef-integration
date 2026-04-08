@@ -3,3 +3,5 @@ token.txt
 data/*.db
 config.yaml
 *.json
+tailwindcss
+tailwindcsscompile.sh

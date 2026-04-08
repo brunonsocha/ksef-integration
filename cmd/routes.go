@@ -10,6 +10,12 @@ import (
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /invoices", app.createInvoice)
+	fs := http.FileServer(http.Dir("./ui/static/"))
+	mux.Handle("/static/", http.StripPrefix("/static", fs))
+	mux.HandleFunc("GET /{$}", app.home)
+	/*
+	mux.HandleFunc("GET /ui/invoices", app.getDashboardInvoices)
+	*/
 	return mux
 }
 
@@ -44,4 +50,12 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": dbInv.Status})
+}
+
+func (app *application) home(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	app.renderer.render(w, "base.html", nil)
 }

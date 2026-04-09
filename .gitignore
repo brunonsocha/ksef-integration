@@ -5,3 +5,5 @@ config.yaml
 *.json
 tailwindcss
 tailwindcsscompile.sh
+.air.toml
+tmp/

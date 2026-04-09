@@ -1,4 +1,4 @@
-{{ block "index" . }}
+{{ define "base" }}
 <!DOCTYPE html>
 <html lang="pl">
     <head>
@@ -8,9 +8,17 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <script src="/static/js/htmx.min.js"></script>
+        <link href="/static/css/style.css" rel="stylesheet">
     </head>
-    <body>
-        <div id="header"><h3>FAKTURY</h3></div>
+    <body class="bg-slate-100 font-sans">
+        <header class="bg-yellow-300 text-green-500 p-6 shadow-md">
+            <div class="container mx-auto">
+                <h1 class="text-2xl font-bold tracking-tight">FAKTURY KSeF</h1>
+            </div>
+        </header>
+        <main class="container mx-auto mt-8 p-4 bg-blue-500 shadow-sm rounded-lg">
+            {{ template "main-page" . }}
+        </main>
     </body>
 </html>
 {{ end }}

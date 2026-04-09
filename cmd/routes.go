@@ -57,5 +57,5 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	app.renderer.render(w, "base.html", nil)
+	app.renderer.render(w, "base", nil)
 }

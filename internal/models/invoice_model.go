@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -31,7 +32,6 @@ type InvoiceModel struct {
 }
 
 func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
-	// handling this here instead of the http handler due to the planned cli integration
 	if inv.CreatedAt.IsZero() {
 		inv.CreatedAt = time.Now()
 	}
@@ -48,8 +48,6 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 }
 
 func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
-	// can't think of an edgecase in which replacing the given id with the scanned one could cause problems.
-	// added a limit 1 t obe consistent
 	stmt := "SELECT * FROM Invoices WHERE Id = ? LIMIT 1"
 	inv := &Invoice{}
 	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
@@ -98,15 +96,11 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 	return invoices, nil
 }
 
-// could just create one singular function that accepts id, ksefErr and ksefId - pass string pointers - and the result will be the same, if the pointer is nil, the update will apply a NULL in the database
-
 func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId, upo_xml string) error {
 	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, upo_xml = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
 	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now(), id)
 	return err
 }
-
-// don't know whether there's a point in having a seperate status for retry - for frontend purposes? could just check whether attempt_count > 0
 
 func (m *InvoiceModel) UpdateRetryInvoice(id int64, ksefErr string) error {
 	stmt := "UPDATE Invoices SET status = ?, attempt_count = attempt_count + 1, ksef_error = ?, updated_at = ? WHERE id = ?"
@@ -124,4 +118,37 @@ func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?  WHERE id = ?"
 	_, err := m.DB.Exec(stmt, StatusPending, time.Now())
 	return err
+}
+
+func (m *InvoiceModel) GetAllInvoices(filter string) ([]*Invoice, error) {
+	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices " 
+	var args []any
+	status := InvoiceStatus(filter)
+	if filter != "" {
+		stmt += "WHERE status = ? "
+		switch status {
+		case StatusFailed, StatusPending, StatusProcessing, StatusSent:
+			args = append(args, status)
+		default:
+			return nil, fmt.Errorf("Niepoprawny filtr.")
+		}
+	} 
+	stmt += "ORDER BY created_at DESC LIMIT 50"
+	rows, err := m.DB.Query(stmt, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var invoices []*Invoice
+	for rows.Next() {
+		inv := &Invoice{}
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+			return nil, err
+		}
+		invoices = append(invoices, inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return invoices, nil
 }

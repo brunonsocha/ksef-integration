@@ -2,10 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/http"
+	"strconv"
 )
+
+type dashboardData struct {
+	Invoices []*models.Invoice
+	CurrentFilter string
+	Page int
+	PrevPage int
+	NextPage int
+}
 
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -13,9 +23,7 @@ func (app *application) routes() http.Handler {
 	fs := http.FileServer(http.Dir("./ui/static/"))
 	mux.Handle("/static/", http.StripPrefix("/static", fs))
 	mux.HandleFunc("GET /{$}", app.home)
-	/*
 	mux.HandleFunc("GET /ui/invoices", app.getDashboardInvoices)
-	*/
 	return mux
 }
 
@@ -57,5 +65,35 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	app.renderer.render(w, "base", nil)
+	http.Redirect(w, r, "/ui/invoices", http.StatusSeeOther)	
+}
+
+func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Request) {
+	filter := r.URL.Query().Get("status")
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	prevPage := page-1
+	if prevPage < 1 {
+		prevPage = 1
+	}
+	invoices, err := app.invoices.GetAllInvoices(filter, page)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		return
+	}
+	data := dashboardData{
+		Invoices: invoices,
+		CurrentFilter: filter,
+		Page: page,
+		PrevPage: prevPage,
+		NextPage: page+1,
+	}
+	app.infoLog.Printf("Załadowano strona %d, filtr %s", data.Page, data.CurrentFilter)
+	if r.Header.Get("HX-Request") != "" {
+		app.renderer.render(w, "main-page", data)
+		return
+	}
+	app.renderer.render(w, "base", data)
 }

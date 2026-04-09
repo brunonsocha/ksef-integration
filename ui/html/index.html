@@ -1,3 +1,63 @@
 {{ define "main-page" }}
-lets go nigas
+<div class="space-y-4" hx-get="/ui/invoices?status={{.CurrentFilter}}&page={{.Page}}" hx-trigger="every 10s" hx-target="#main-content">
+    <div class="flex gap-2">
+        <button hx-get="/ui/invoices?status=all&page=1" hx-target="#main-content" class="bg-white px-3 py-1 rounded shadow-sm text-sm">Wszystkie</button>
+        <button hx-get="/ui/invoices?status=PENDING&page=1" hx-target="#main-content" class="bg-blue-300 px-3 py-1 rounded shadow-sm text-sm">Oczekujące</button>
+        <button hx-get="/ui/invoices?status=PROCESSING&page=1" hx-target="#main-content" class="bg-yellow-200 px-3 py-1 rounded shadow-sm text-sm">Przetwarzane</button>
+        <button hx-get="/ui/invoices?status=SENT&page=1" hx-target="#main-content" class="bg-green-300 px-3 py-1 rounded shadow-sm text-sm">Wysłane</button>
+        <button hx-get="/ui/invoices?status=FAILED&page=1" hx-target="#main-content" class="bg-red-300 px-3 py-1 rounded shadow-sm text-sm">Niewysłane</button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="p-4 text-left text-xs font-semibold uppercase">ID Zewn.</th>
+                    <th class="p-4 text-left text-xs font-semibold uppercase">Status</th>
+                    <th class="p-4 text-left text-xs font-semibold uppercase">ID KSeF</th>
+                    <th class="p-4 text-center text-xs font-semibold uppercase">Próby</th>
+                    <th class="p-4 text-center text-xs font-semibold uppercase">Data aktualizacji</th>
+                    <th class="p-4 text-center text-xs font-semibold uppercase">Data utworzenia</th>
+                </tr>
+            </thead>
+            <tbody id="invoice-rows">
+                {{ template "invoice-rows" . }}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex justify-between items-center py-2">
+        <button hx-get="/ui/invoices?status={{.CurrentFilter}}&page={{.PrevPage}}" hx-target="#main-content" class="text-sm font-medium text-white hover:underline">
+            Poprzednia
+        </button>
+        
+        <span class="text-white">Strona {{.Page}}</span>
+
+        <button hx-get="/ui/invoices?status={{.CurrentFilter}}&page={{.NextPage}}" hx-target="#main-content" class="text-sm font-medium text-white hover:underline">
+            Następna
+        </button>
+    </div>
+</div>
+{{ end }}
+
+{{ define "invoice-rows" }}
+    {{ range .Invoices }}
+    <tr class="border-b hover:bg-gray-50 transition-colors">
+        <td class="p-4 text-sm">{{ .ExternalId }}</td>
+        <td class="p-4 text-sm font-bold">{{ .Status }}</td>
+        <td class="p-4 text-sm">
+            {{ if .KsefId }}{{ .KsefId }}{{ else }}<span class="text-gray-400 text-xs">-</span>{{ end }}
+            {{ if .KsefErr }}
+                <div class="text-[10px] text-red-500 italic mt-1">{{ .KsefErr }}</div>
+            {{ end }}
+        </td>
+        <td class="p-4 text-sm text-center">{{ .AttemptCount }}</td>
+        <td class="p-4 text-sm text-center text-gray-500">{{ .UpdatedAt.Format "2006-01-02 15:04" }}</td>
+        <td class="p-4 text-sm text-center text-gray-500">{{ .CreatedAt.Format "2006-01-02 15:04" }}</td>
+    </tr>
+    {{ else }}
+    <tr>
+        <td colspan="5" class="p-10 text-center text-gray-400">Brak faktur...</td>
+    </tr>
+    {{ end }}
 {{ end }}

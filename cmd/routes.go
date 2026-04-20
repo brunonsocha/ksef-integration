@@ -15,6 +15,7 @@ type dashboardData struct {
 	Page int
 	PrevPage int
 	NextPage int
+	More bool
 }
 
 func (app *application) routes() http.Handler {
@@ -70,6 +71,8 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
+	// will make it configurable
+	pageSize := 50
 	page, err := strconv.Atoi(r.URL.Query().Get("page"))
 	if err != nil || page < 1 {
 		page = 1
@@ -78,10 +81,15 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 	if prevPage < 1 {
 		prevPage = 1
 	}
-	invoices, err := app.invoices.GetAllInvoices(filter, page)
+	invoices, err := app.invoices.GetAllInvoices(filter, page, pageSize+1)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
+	}
+	more := false
+	if len(invoices) > pageSize {
+		more = true
+		invoices = invoices[:50]
 	}
 	data := dashboardData{
 		Invoices: invoices,
@@ -89,6 +97,7 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 		Page: page,
 		PrevPage: prevPage,
 		NextPage: page+1,
+		More: more,
 	}
 	app.infoLog.Printf("Załadowano strona %d, filtr %s", data.Page, data.CurrentFilter)
 	if r.Header.Get("HX-Request") != "" {

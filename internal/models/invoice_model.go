@@ -121,7 +121,7 @@ func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 }
 
 // hardcoded limit 50 - might make it configurable
-func (m *InvoiceModel) GetAllInvoices(filter string, page int) ([]*Invoice, error) {
+func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoice, error) {
 	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices " 
 	var args []any
 	status := InvoiceStatus(filter)
@@ -134,9 +134,9 @@ func (m *InvoiceModel) GetAllInvoices(filter string, page int) ([]*Invoice, erro
 			return nil, fmt.Errorf("Niepoprawny filtr: %s.", filter)
 		}
 	} 
-	pageOffset := (page-1) * 50
-	args = append(args, pageOffset)	
-	stmt += "ORDER BY created_at DESC LIMIT 50 OFFSET ?"
+	pageOffset := (page-1) * (limit-1)
+	args = append(args, limit, pageOffset)	
+	stmt += "ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	rows, err := m.DB.Query(stmt, args...)
 	if err != nil {
 		return nil, err

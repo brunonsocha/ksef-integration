@@ -17,6 +17,7 @@ const (
 type Invoice struct {
 	Id int64 `json:"id"` 
 	ExternalId string `json:"external_id"`
+	RawJson string `json:"-"`
 	RawXml string `json:"-"`
 	Status InvoiceStatus `json:"status"`
 	KsefId *string `json:"ksef_id"` 
@@ -40,17 +41,17 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 	inv.KsefId = nil
 	inv.AttemptCount = 0
 	inv.Status = StatusPending
-	stmt := "INSERT INTO Invoices(external_id, raw_xml, status) VALUES (?, ?, ?) RETURNING id, created_at, updated_at;"
-	if err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawXml, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	stmt := "INSERT INTO Invoices(external_id, raw_json, raw_xml, status) VALUES (?, ?, ?, ?) RETURNING id, created_at, updated_at;"
+	if err := m.DB.QueryRow(stmt, inv.ExternalId, inv.RawJson, inv.RawXml, inv.Status).Scan(&inv.Id, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return 0, err
 	}
 	return inv.Id, nil
 }
 
 func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
-	stmt := "SELECT * FROM Invoices WHERE Id = ? LIMIT 1"
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at FROM Invoices WHERE id = ? LIMIT 1"
 	inv := &Invoice{}
-	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return inv, nil
@@ -62,7 +63,7 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 		return nil, err
 	}
 	defer transaction.Rollback()
-	stmt := "SELECT id, external_id, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT ?"
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT ?"
 	rows, err := transaction.Query(stmt, StatusPending, limit)
 	if err != nil {
 		return nil, err
@@ -72,7 +73,7 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 	var idsToUpdate []int64
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -116,11 +117,10 @@ func (m *InvoiceModel) UpdateFailedInvoice(id int64, ksefErr string) error {
 
 func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?  WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusPending, time.Now())
+	_, err := m.DB.Exec(stmt, StatusPending, time.Now(), id)
 	return err
 }
 
-// hardcoded limit 50 - might make it configurable
 func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoice, error) {
 	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices " 
 	var args []any

@@ -45,10 +45,10 @@ type Status struct {
 	Extensions map[string]string `json:"extensions"`
 }
 
-func (c *Client) SendInvoice(raw_xml []byte) (string, error) {
+func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, error) {
 	invHash := hashSHA256(raw_xml)
 	invSize := int64(len(raw_xml))
-	encInvCon, err := c.encryptCBC(raw_xml)
+	encInvCon, err := c.encryptCBC(raw_xml, inSession)
 	if err != nil {
 		return "", fmt.Errorf("Błąd w szyfrowaniu faktury: %v", err)
 	}
@@ -61,7 +61,7 @@ func (c *Client) SendInvoice(raw_xml []byte) (string, error) {
 		EncryptedInvoiceSize: encInvSize,
 		EncryptedInvoiceContent: encInvCon,
 	}
-	posturl := fmt.Sprintf("%s/sessions/online/%s/invoices", c.ApiURL, c.InSessionRef)
+	posturl := fmt.Sprintf("%s/sessions/online/%s/invoices", c.ApiURL, inSession.InSessionRef)
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(&payload); err != nil {
 		return "", err
@@ -91,7 +91,7 @@ func (c *Client) SendInvoice(raw_xml []byte) (string, error) {
 		}
 		if len(errRes.Exception.ExceptionDetailList) > 0 {
 			if errRes.Exception.ExceptionDetailList[0].ExceptionCode == 21180 {
-				c.InSessionRef = ""
+				return "", INVALID_SESSION_ERR
 			}
 			return "", fmt.Errorf("Ksef zwrócił błąd - kod statusu: %v - %v - %v", res.StatusCode, errRes.Exception.ExceptionDetailList[0].ExceptionDescription, errRes.Exception.ExceptionDetailList[0].ExceptionCode)
 		}

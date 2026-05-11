@@ -73,14 +73,14 @@ func padPKCS(data []byte, blockSize int) []byte {
 	return append(data, padding...)
 }
 
-func (c *Client) encryptCBC(text []byte) ([]byte, error) {
-	block, err := aes.NewCipher(c.InSessionAESKey)
+func (c *Client) encryptCBC(text []byte, inSession *InSession) ([]byte, error) {
+	block, err := aes.NewCipher(inSession.InSessionAESKey)
 	if err != nil {
 		return nil, err
 	}
 	paddedData := padPKCS(text, aes.BlockSize)
 	ciphertxt := make([]byte, len(paddedData))
-	mode := cipher.NewCBCEncrypter(block, c.InSessionInitializationVector)
+	mode := cipher.NewCBCEncrypter(block, inSession.InSessionInitializationVector)
 	mode.CryptBlocks(ciphertxt, paddedData)
 	return ciphertxt, nil
 }

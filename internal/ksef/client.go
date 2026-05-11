@@ -17,10 +17,6 @@ type Client struct {
 	SessionTokenValidity time.Time
 	RefreshToken string
 	RefreshTokenValidity time.Time
-	InSessionRef string
-	InSessionAESKey []byte
-	InSessionInitializationVector []byte
-	InSessionValidity time.Time
 }
 
 func NewClient(nip, apiToken, publicKeyPath, apiURL string) *Client {

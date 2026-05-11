@@ -2,7 +2,6 @@ package ksef
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -243,88 +242,3 @@ func (c *Client) ExecuteRequestTokenCheck(r *http.Request) (*http.Response, erro
 	return c.httpClient.Do(r)
 }
 
-func (c *Client) OpenInSession() error {
-	if err := c.checkKeys(); err != nil {
-		return err
-	}
-	aesKey := make([]byte, 32)
-	iv := make([]byte, 16)
-	if _, err := rand.Read(aesKey); err != nil {
-		return fmt.Errorf("Błąd w generowaniu klucza: %v", err)
-	}
-	if _, err := rand.Read(iv); err != nil {
-		return fmt.Errorf("Błąd w generowaniu wektora inicjalizującego: %v", err)
-	}
-	encryptedKey, err := c.encryptWithPKey(aesKey, c.SessionPublicKey)
-	if err != nil {
-		return fmt.Errorf("Błąd przy enkrypcji klucza: %v", err)
-	}
-	payload := InteractiveSessionPayload{
-		FormCode: SessionFormCode{
-			SystemCode: "FA (3)",
-			SchemaVersion: "1-0E",
-			Value: "FA",
-		},
-		Encryption: Encryption{
-			EncryptedSymmetricKey: encryptedKey,
-			InitializationVector: iv,
-		},
-	}
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(&payload); err != nil {
-		return err
-	}
-	req, err := http.NewRequest("POST", c.ApiURL + "/sessions/online", &buf)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.ExecuteRequestTokenCheck(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("Nie można było rozpocząć sesji interaktywnej, Ksef zwrócił %v.", res.StatusCode)
-	}
-	var inRes InteractiveSessionResponse
-	if err := json.NewDecoder(res.Body).Decode(&inRes); err != nil {
-		return err
-	}
-	c.InSessionRef= inRes.ReferenceNumber
-	c.InSessionAESKey = aesKey
-	c.InSessionInitializationVector = iv
-	c.InSessionValidity = inRes.ValidUntil
-	return nil
-}
-
-func (c *Client) CloseInSession() error {
-	// always remove the details, even if session is already closed
-	defer func() {
-		c.InSessionRef = ""
-	}()
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/sessions/online/%s/close", c.ApiURL, c.InSessionRef), nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	res, err := c.ExecuteRequestTokenCheck(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusNoContent {
-		var errRes struct {
-			Exception struct {
-				ExceptionDetailList []struct {
-					ExceptionCode int `json:"exceptionCode"`
-					ExceptionDescription string `json:"exceptionDescription"`
-				} `json:"exceptionDetailList"`
-			} `json:"exception"`
-		}
-		json.NewDecoder(res.Body).Decode(&errRes)
-		return fmt.Errorf("Ksef nie zamknął sesji i zwrócił kod statusu %v - %v - %v", res.StatusCode, errRes.Exception.ExceptionDetailList[0].ExceptionDescription, errRes.Exception.ExceptionDetailList[0].ExceptionCode)
-	}
-	return nil
-}

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/http"
@@ -30,7 +31,15 @@ func (app *application) routes() http.Handler {
 
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	var inv ksef.InvoiceReceived
-	if err := json.NewDecoder(r.Body).Decode(&inv); err != nil {
+	// will save json for debugging
+	bodyJson, err := io.ReadAll(r.Body)
+	if err != nil {
+		app.errorLog.Printf("Nie można było odczytać otrzymanego requesta: %v", err)
+		http.Error(w, "Niepoprawny request", http.StatusInternalServerError)
+		return
+	}
+	// wouldnt work with decoder
+	if err := json.Unmarshal(bodyJson, &inv); err != nil {
 		app.errorLog.Printf("Zły format JSON: %v", err)
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
@@ -49,6 +58,7 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	
 	dbInv := &models.Invoice{
 		ExternalId: inv.InvoiceNumber,
+		RawJson: string(bodyJson),
 		RawXml: string(xmlcontent),
 	}
 	id, err := app.invoices.InsertInvoice(dbInv)

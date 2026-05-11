@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/url"
 	"sync"
@@ -21,68 +22,62 @@ func (app *application) startSender(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			app.infoLog.Printf("Aplikacja zostanie zamknięta.")
-			if app.ksefClient.InSessionRef != "" {
-				if err := app.ksefClient.CloseInSession(); err != nil {
-					app.errorLog.Printf("Błąd przy zamykaniu sesji interaktywnej: %v", err)
-				} else {
-					app.infoLog.Printf("Pomyślnie zamknięto sesję interaktywną.")
-				}
-			}
 			return
 		case <-ticker.C:
-		invoices, err := app.invoices.GetPendingInvoicesConc(50) // will make it configurable as well
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				app.errorLog.Printf("Błąd przy pozyskiwaniu faktur: %v", err)
-			}
-			continue
-		}
-	
-		app.infoLog.Printf("Odnaleziono %d faktur. Rozpoczynanie wysyłki.", len(invoices))
-
-		if app.ksefClient.InSessionRef == "" {
-			if err := app.ksefClient.OpenInSession(); err != nil {
-				app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
-				for _, inv := range invoices {
-					if networkCheck(err) {
-							app.invoices.UpdatePendingInvoice(inv.Id)
-					} else {
-						app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
-					}
-
+			invoices, err := app.invoices.GetPendingInvoicesConc(50) // will make it configurable as well
+			if err != nil {
+				if !errors.Is(err, sql.ErrNoRows) {
+					app.errorLog.Printf("Błąd przy pozyskiwaniu faktur: %v", err)
 				}
 				continue
 			}
-		}
-
-		var wg sync.WaitGroup
-
-		for _, inv := range invoices {
-			wg.Add(1)
-			go func(invoiceToProcess *models.Invoice) {
-				defer wg.Done()
-				taskChan <- struct{}{}
-				defer func(){
-					<- taskChan
-				}()
-				app.processInvoice(invoiceToProcess)
-			}(inv)
-		}
-		wg.Wait()
-		if app.ksefClient.InSessionRef != "" {
-			if err := app.ksefClient.CloseInSession(); err != nil {
-				app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
-			} else {
-				app.infoLog.Printf("Zamknięto sesję.")
+			app.infoLog.Printf("Odnaleziono %d faktur. Rozpoczynanie wysyłki.", len(invoices))
+		
+			inSession, err := app.ksefClient.OpenInSession()
+			if err != nil {
+				app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
+				for _, inv := range invoices {
+					if networkCheck(err) {
+						app.invoices.UpdatePendingInvoice(inv.Id)
+					} else {
+						app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
+					}
+				}
+				continue
 			}
+
+			var wg sync.WaitGroup
+
+			for _, inv := range invoices {
+				wg.Add(1)
+				go func(invoiceToProcess *models.Invoice) {
+					defer wg.Done()
+					taskChan <- struct{}{}
+					defer func(){
+						<- taskChan
+					}()
+					app.processInvoice(invoiceToProcess, inSession)
+				}(inv)
+			}
+			wg.Wait()
+			if err := app.ksefClient.CloseInSession(inSession); err != nil {
+				app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
+				continue
+			}
+			app.infoLog.Printf("Pomyślnie zamknięto sesję.")
 		}
-	}
 	}
 }
 
-func (app *application) processInvoice(inv *models.Invoice) {
-	ref, err := app.ksefClient.SendInvoice([]byte(inv.RawXml))
+func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSession) {
+	ref, err := app.ksefClient.SendInvoice([]byte(inv.RawXml), inSession)
 	if err != nil {
+		if errors.Is(err, ksef.INVALID_SESSION_ERR) {
+			// gotta implement something to mark the session as invalid. no point in trying to send more invoices while using an invalid session.
+			app.errorLog.Printf("Faktura nie została wysłana przez zamknięcie sesji - zalecana ponowna próba wysyłki.")
+			app.invoices.UpdatePendingInvoice(inv.Id)
+			return
+		}
 		if networkCheck(err) {
 			app.infoLog.Printf("Brak sieci. Wstrzymywanie faktury o ID: %d", inv.Id)
 			app.invoices.UpdatePendingInvoice(inv.Id)
@@ -92,7 +87,7 @@ func (app *application) processInvoice(inv *models.Invoice) {
 		app.handleInvoiceFailure(inv, err.Error())
 		return
 	}
-	statusRes, err := app.ksefClient.WaitForSendingConfirmation(15, app.ksefClient.InSessionRef, ref) // config for max attempts????
+	statusRes, err := app.ksefClient.WaitForSendingConfirmation(15, inSession.InSessionRef, ref) // config for max attempts????
 	if err != nil {
 		if networkCheck(err) {
 			app.infoLog.Printf("Brak sieci. Wstrzymywanie faktury o ID: %d", inv.Id)

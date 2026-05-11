@@ -1,5 +1,7 @@
 package ksef
 
+import "errors"
+
 type InvoiceType string
 
 const (
@@ -11,6 +13,8 @@ const (
 	InvoiceTypeKORZAL InvoiceType = "KOR_ZAL"
 	InvoiceTypeKORROZ InvoiceType = "KOR_ROZ"
 )
+
+var INVALID_SESSION_ERR = errors.New("Invalid session reference.")
 
 type TaxRate string
 

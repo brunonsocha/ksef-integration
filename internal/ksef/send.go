@@ -148,8 +148,13 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 			continue
 		}
 		switch invStatRes.Status.Code {
+		// stupid design. these mean ksef might be still processing, yet if such response was received on the last attempt, the invoice will be marked as FAILED.
+		// new status and polling for UPO?
 		case 100, 150:
 			time.Sleep(time.Second * 5)
+			if i == maxAttempts-1 {
+				return nil, UNKNOWN_STATE_ERR
+			}
 			continue
 		case 200:
 			if invStatRes.KsefNumber == nil {

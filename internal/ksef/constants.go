@@ -15,6 +15,7 @@ const (
 )
 
 var INVALID_SESSION_ERR = errors.New("Invalid session reference.")
+var UNKNOWN_STATE_ERR = errors.New("KSeF has not confirmed the invoice status.")
 
 type TaxRate string
 

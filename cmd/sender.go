@@ -38,7 +38,9 @@ func (app *application) startSender(ctx context.Context) {
 				app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
 				for _, inv := range invoices {
 					if networkCheck(err) {
-						app.invoices.UpdatePendingInvoice(inv.Id)
+						if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+							app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+						}
 					} else {
 						app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
 					}
@@ -69,18 +71,26 @@ func (app *application) startSender(ctx context.Context) {
 	}
 }
 
+// TODO: add the unknown invoice status check
+// probably gonna create seperate functions for processing a sending batch and confirming invoices and call them
+// from the startSender rather than have startSender me a colossus of a function
+
 func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSession) {
 	ref, err := app.ksefClient.SendInvoice([]byte(inv.RawXml), inSession)
 	if err != nil {
 		if errors.Is(err, ksef.INVALID_SESSION_ERR) {
 			// gotta implement something to mark the session as invalid. no point in trying to send more invoices while using an invalid session.
 			app.errorLog.Printf("Faktura nie została wysłana przez zamknięcie sesji - zalecana ponowna próba wysyłki.")
-			app.invoices.UpdatePendingInvoice(inv.Id)
+			if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+				app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+			}
 			return
 		}
 		if networkCheck(err) {
 			app.infoLog.Printf("Brak sieci. Wstrzymywanie faktury o ID: %d", inv.Id)
-			app.invoices.UpdatePendingInvoice(inv.Id)
+			if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+				app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+			}
 			return
 		}
 		app.errorLog.Printf("Błąd przy wysyłaniu faktury: %v", err)
@@ -91,7 +101,15 @@ func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSe
 	if err != nil {
 		if networkCheck(err) {
 			app.infoLog.Printf("Brak sieci. Wstrzymywanie faktury o ID: %d", inv.Id)
-			app.invoices.UpdatePendingInvoice(inv.Id)
+			if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+				app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+			}
+			return
+		} else if errors.Is(err, ksef.UNKNOWN_STATE_ERR) {
+			app.infoLog.Printf("KSeF nie zwrócił informacji o statusie faktury o ID: %d, ponawianie próby.", inv.Id)
+			if err := app.invoices.UpdateUnknownInvoice(inv.Id, ref); err != nil {
+				app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+			}
 			return
 		}
 		app.errorLog.Printf("Błąd przy potwierdzaniu statusu faktury: %v", err)

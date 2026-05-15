@@ -12,7 +12,9 @@ const (
 	StatusPending InvoiceStatus = "PENDING"
 	StatusProcessing InvoiceStatus = "PROCESSING"
 	StatusSent InvoiceStatus = "SENT"
-	StatusFailed InvoiceStatus = "FAILED")
+	StatusFailed InvoiceStatus = "FAILED"
+	StatusUnknown InvoiceStatus = "UNKNOWN"
+)
 
 type Invoice struct {
 	Id int64 `json:"id"` 
@@ -26,6 +28,7 @@ type Invoice struct {
 	AttemptCount int `json:"attempt_count"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	SubmissionReference *string `json:"submission_reference"`
 }
 
 type InvoiceModel struct {
@@ -49,9 +52,9 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 }
 
 func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
-	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at FROM Invoices WHERE id = ? LIMIT 1"
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at, submission_reference FROM Invoices WHERE id = ? LIMIT 1"
 	inv := &Invoice{}
-	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference); err != nil {
 		return nil, err
 	}
 	return inv, nil
@@ -63,7 +66,7 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 		return nil, err
 	}
 	defer transaction.Rollback()
-	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT ?"
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at, submission_reference FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT ?"
 	rows, err := transaction.Query(stmt, StatusPending, limit)
 	if err != nil {
 		return nil, err
@@ -73,7 +76,47 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 	var idsToUpdate []int64
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference); err != nil {
+			return nil, err
+		}
+		invoices = append(invoices, inv)
+		idsToUpdate = append(idsToUpdate, inv.Id)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(invoices) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	for _, id := range idsToUpdate {
+		_, err := transaction.Exec("UPDATE Invoices SET status = ?, updated_at = ? WHERE id = ?", StatusProcessing, time.Now(), id)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err = transaction.Commit(); err != nil {
+		return nil, err
+	}
+	return invoices, nil
+}
+
+func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
+	transaction, err := m.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer transaction.Rollback()
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at, submission_reference FROM Invoices WHERE status = ? ORDER BY created_at ASC LIMIT ?"
+	rows, err := transaction.Query(stmt, StatusUnknown, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var invoices []*Invoice
+	var idsToUpdate []int64
+	for rows.Next() {
+		inv := &Invoice{}
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -121,14 +164,20 @@ func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 	return err
 }
 
+func (m *InvoiceModel) UpdateUnknownInvoice(id int64, submissionReference string)error {
+	stmt := "UPDATE Invoices SET status = ?, updated_at = ?, submission_reference = ?  WHERE id = ?"
+	_, err := m.DB.Exec(stmt, StatusUnknown, time.Now(), submissionReference, id)
+	return err
+}
+
 func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoice, error) {
-	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at FROM Invoices " 
+	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at, submission_reference FROM Invoices " 
 	var args []any
 	status := InvoiceStatus(filter)
 	if filter != ""  && filter != "all" {
 		stmt += "WHERE status = ? "
 		switch status {
-		case StatusFailed, StatusPending, StatusProcessing, StatusSent:
+		case StatusFailed, StatusPending, StatusProcessing, StatusSent, StatusUnknown:
 			args = append(args, status)
 		default:
 			return nil, fmt.Errorf("Niepoprawny filtr: %s.", filter)
@@ -145,7 +194,7 @@ func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoic
 	var invoices []*Invoice
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)

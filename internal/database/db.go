@@ -32,7 +32,7 @@ func Connect(dbPath string) (*sql.DB, error) {
 }
 
 func Setup(db *sql.DB) error {
-	stmt := "CREATE TABLE IF NOT EXISTS Invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, external_id TEXT NOT NULL UNIQUE, raw_json TEXT, raw_xml TEXT, status TEXT NOT NULL DEFAULT 'PENDING', ksef_id TEXT, ksef_error TEXT, upo_xml TEXT, attempt_count INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+	stmt := "CREATE TABLE IF NOT EXISTS Invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, external_id TEXT NOT NULL UNIQUE, raw_json TEXT, raw_xml TEXT, status TEXT NOT NULL DEFAULT 'PENDING', ksef_id TEXT, ksef_error TEXT, upo_xml TEXT, attempt_count INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, submission_reference TEXT);"
 	_, err := db.Exec(stmt)
 	return err
 }

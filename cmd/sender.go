@@ -24,12 +24,23 @@ func (app *application) startSender(ctx context.Context) {
 			app.infoLog.Printf("Aplikacja zostanie zamknięta.")
 			return
 		case <-ticker.C:
+			app.sendInvoice(taskChan)
+			app.checkUnknownInvoices(taskChan)
+		}
+	}
+}
+
+// TODO: add the unknown invoice status check
+// probably gonna create seperate functions for processing a sending batch and confirming invoices and call them
+// from the startSender rather than have startSender me a colossus of a function
+
+func (app *application) sendInvoice(c chan struct{}) {
 			invoices, err := app.invoices.GetPendingInvoicesConc(50) // will make it configurable as well
 			if err != nil {
 				if !errors.Is(err, sql.ErrNoRows) {
 					app.errorLog.Printf("Błąd przy pozyskiwaniu faktur: %v", err)
 				}
-				continue
+				return
 			}
 			app.infoLog.Printf("Odnaleziono %d faktur. Rozpoczynanie wysyłki.", len(invoices))
 		
@@ -45,7 +56,7 @@ func (app *application) startSender(ctx context.Context) {
 						app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
 					}
 				}
-				continue
+				return
 			}
 
 			var wg sync.WaitGroup
@@ -54,9 +65,9 @@ func (app *application) startSender(ctx context.Context) {
 				wg.Add(1)
 				go func(invoiceToProcess *models.Invoice) {
 					defer wg.Done()
-					taskChan <- struct{}{}
+					c <- struct{}{}
 					defer func(){
-						<- taskChan
+						<- c
 					}()
 					app.processInvoice(invoiceToProcess, inSession)
 				}(inv)
@@ -64,22 +75,59 @@ func (app *application) startSender(ctx context.Context) {
 			wg.Wait()
 			if err := app.ksefClient.CloseInSession(inSession); err != nil {
 				app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
-				continue
+				return
 			}
 			app.infoLog.Printf("Pomyślnie zamknięto sesję.")
-		}
-	}
 }
 
-// TODO: add the unknown invoice status check
-// probably gonna create seperate functions for processing a sending batch and confirming invoices and call them
-// from the startSender rather than have startSender me a colossus of a function
+func (app *application) checkUnknownInvoices(c chan struct{}) {
+		invoices, err := app.invoices.GetUnknownInvoicesConc(50)
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				app.errorLog.Printf("Błąd przy pozyskiwaniu faktur o nieznanym statusie: %v", err)
+			}
+			return
+		}
+		app.infoLog.Printf("Odnaleziono %d faktur o nieznanym statusie. Sprawdzanie statusu.", len(invoices))
+		inSession, err := app.ksefClient.OpenInSession()
+		if err != nil {
+			app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
+			for _, inv := range invoices {
+				if networkCheck(err) {
+					if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+						app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+					}
+				} else {
+					app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
+				}
+			}
+			return
+		}
+		var wg sync.WaitGroup
+		for _, inv := range invoices {
+			wg.Add(1)
+			go func(invoiceToProcess *models.Invoice) {
+				defer wg.Done()
+				c <- struct{}{}
+				defer func(){
+					<- c
+				}()
+				app.KURWACHECKINVOICE
+			}(inv)
+		}
+		wg.Wait()
+		if err := app.ksefClient.CloseInSession(inSession); err != nil {
+			app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
+			return
+		}
+		app.infoLog.Printf("Pomyślnie zamknięto sesję.")
+}
+
 
 func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSession) {
 	ref, err := app.ksefClient.SendInvoice([]byte(inv.RawXml), inSession)
 	if err != nil {
 		if errors.Is(err, ksef.INVALID_SESSION_ERR) {
-			// gotta implement something to mark the session as invalid. no point in trying to send more invoices while using an invalid session.
 			app.errorLog.Printf("Faktura nie została wysłana przez zamknięcie sesji - zalecana ponowna próba wysyłki.")
 			if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
 				app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)

@@ -45,6 +45,26 @@ type Status struct {
 	Extensions map[string]string `json:"extensions"`
 }
 
+type pollingOutcome int
+
+const (
+	successRes pollingOutcome = iota
+	processingRes
+	rejected
+	rateLimited
+	temporaryFailure
+	badResponse
+	httpFail
+)
+
+type pollingOutcomeRes struct {
+	outcome pollingOutcome
+	statusRes *InvoiceStatusRes
+	retryAfter time.Duration
+	err error
+	httpStatus int
+}
+
 func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, error) {
 	invHash := hashSHA256(raw_xml)
 	invSize := int64(len(raw_xml))
@@ -104,68 +124,141 @@ func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, erro
 	return invRes.ReferenceNumber, nil
 }
 
-func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) (*InvoiceStatusRes, int, error) {
+func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeRes {
 	// int is the retry after in case of rate limiting
 	fullUrl := fmt.Sprintf("%s/sessions/%s/invoices/%s", c.ApiURL, sessionRef, invoiceRef)
 	req, err := http.NewRequest("GET", fullUrl, nil)
 	if err != nil {
-		return nil, 0, err
+		return pollingOutcomeRes{
+			outcome: httpFail,
+			err: err,
+		}
 	}
 	req.Header.Set("Accept", "application/json")
 	res, err := c.ExecuteRequestTokenCheck(req)
 	if err != nil {
-		return nil, 0, err
+		return pollingOutcomeRes{
+			outcome: temporaryFailure,
+			err: err,
+		}
 	}
 	defer res.Body.Close()
-	if res.StatusCode == http.StatusOK {
-		var invStatRes InvoiceStatusRes
-		if err := json.NewDecoder(res.Body).Decode(&invStatRes); err != nil {
-			return nil, 0, err
-		}
-		return &invStatRes, 0, nil
-	}
-	if res.StatusCode == http.StatusTooManyRequests {
-		retryAfter := res.Header.Get("Retry-After")
-		retryAfterInt, err := strconv.Atoi(retryAfter)
-		if err != nil || retryAfterInt == 0 {
-			retryAfterInt = 5 // hardcoded fallback of 5 seconds
-		}
-		return nil, retryAfterInt, fmt.Errorf("Limit żądań przekroczony - następne zapytanie można wykonać za %d sekund.", retryAfterInt)
-	}
+	var invStatRes InvoiceStatusRes
 
-	return nil, 0, fmt.Errorf("Wystąpił błąd w sprawdzaniu statusu wysyłki - KSeF zwrócił kod statusu %d.", res.StatusCode)
+	switch res.StatusCode {
+	case http.StatusOK:
+		if err := json.NewDecoder(res.Body).Decode(&invStatRes); err != nil {
+			return pollingOutcomeRes{
+				outcome: badResponse,
+				err: err,
+				httpStatus: res.StatusCode,
+			}
+		}
+		switch invStatRes.Status.Code {
+		case 100, 150:
+		// can't use a 150 constant, as the KSeF API docs say that 150 is processing. added processing just in case (102)
+			return pollingOutcomeRes {
+				outcome: processingRes,
+				statusRes: &invStatRes,
+				httpStatus: res.StatusCode,
+			}
+		case 200:
+			return pollingOutcomeRes {
+				outcome: successRes,
+				statusRes: &invStatRes,
+				httpStatus: res.StatusCode,
+			}
+		case 405, 410, 415, 430, 435, 440, 450:
+			return pollingOutcomeRes{
+				outcome: rejected,
+				statusRes: &invStatRes,
+				httpStatus: res.StatusCode,
+			}
+		case 500, 550:
+			return pollingOutcomeRes{
+				outcome: temporaryFailure,
+				statusRes: &invStatRes,
+				err: fmt.Errorf("KSeF zwrócił błąd: %s", invStatRes.Status.Description),
+				httpStatus: res.StatusCode,
+			}
+		default:
+			return pollingOutcomeRes{
+				outcome: badResponse,
+				statusRes: &invStatRes,
+				err: fmt.Errorf("KSeF zwrócił nieznany błąd: %s", invStatRes.Status.Description),
+				httpStatus: res.StatusCode,
+			}
+		}
+	case http.StatusTooManyRequests:
+		retryAfter := 5*time.Second
+		if header := res.Header.Get("Retry-After"); header != "" {
+			seconds, err := strconv.Atoi(header)
+			if err != nil {
+				return pollingOutcomeRes{
+					outcome: rateLimited,
+					retryAfter: retryAfter,
+					err: fmt.Errorf("KSeF otrzymał za dużo żądań."),
+					httpStatus: res.StatusCode,
+				}
+			}
+			retryAfter = time.Duration(seconds)*time.Second
+		}
+		return pollingOutcomeRes{
+			outcome: rateLimited,
+			retryAfter: retryAfter,
+			err: fmt.Errorf("KSeF otrzymał za dużo żądań."),
+			httpStatus: res.StatusCode,
+		}
+	default:
+		if res.StatusCode >= 500 {
+			return pollingOutcomeRes{
+				outcome: temporaryFailure,
+				err: fmt.Errorf("Tymczasowy błąd: %d", res.StatusCode),
+				httpStatus: res.StatusCode,
+			}
+		}
+		return pollingOutcomeRes{
+			outcome: httpFail,
+			err: fmt.Errorf("KSeF zwrócił błąd: %d", res.StatusCode),
+			httpStatus: res.StatusCode,
+		}
+	}
 }
 
 func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoiceRef string) (*InvoiceStatusRes, error) {
+	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		invStatRes, retryAfter, err := c.getInvoiceStatus(sessionRef, invoiceRef)
-		if err != nil {
-			if retryAfter > 0 {
-				time.Sleep(time.Duration(retryAfter) * time.Second)
-				continue
-			}
-			time.Sleep(time.Second * 5)
-			continue
-		}
-		switch invStatRes.Status.Code {
+		pollingStatus := c.getInvoiceStatus(sessionRef, invoiceRef)
+		switch pollingStatus.outcome {
 		// stupid design. these mean ksef might be still processing, yet if such response was received on the last attempt, the invoice will be marked as FAILED.
 		// new status and polling for UPO?
-		case 100, 150:
-			time.Sleep(time.Second * 5)
+		case processingRes:
 			if i == maxAttempts-1 {
 				return nil, UNKNOWN_STATE_ERR
 			}
-			continue
-		case 200:
-			if invStatRes.KsefNumber == nil {
-				return nil, fmt.Errorf("KSeF potwierdził otrzymanie faktury - ale nie nadał numeru KSeF.")
+			time.Sleep(time.Second * 5)
+		case successRes:
+			if pollingStatus.statusRes.KsefNumber == nil {
+				return nil, fmt.Errorf("KSeF potwierdził otrzymanie faktury, ale nie nadał numeru KSeF")
 			}
-			return invStatRes, nil
-		default:
-			return nil, fmt.Errorf("Faktura została odrzucona przez KSeF - KSeF zwrócił kod %d - błąd %s", invStatRes.Status.Code, invStatRes.Status.Description)
+			return pollingStatus.statusRes, nil
+		case rateLimited:
+			lastErr = pollingStatus.err
+			time.Sleep(pollingStatus.retryAfter)
+		case temporaryFailure:
+			lastErr = pollingStatus.err
+			if i == maxAttempts-1 {
+				return nil, fmt.Errorf("Nie można było wysłać faktury")
+			}
+			time.Sleep(time.Second * 5)
+		case httpFail, badResponse:
+			lastErr = pollingStatus.err
+			return nil, fmt.Errorf("Wystąpił błąd: %v - %d", pollingStatus.err, pollingStatus.httpStatus)
+		case rejected:
+			return nil, fmt.Errorf("KSeF odrzucił fakturę: %v", fmt.Errorf("%d - %s - %s - %s", pollingStatus.statusRes.Status.Code, pollingStatus.statusRes.Status.Description, pollingStatus.statusRes.Status.Extensions, pollingStatus.statusRes.Status.Details))
 		}
 	}
-	return nil, fmt.Errorf("Nie udało się pozyskać statusu wysłanej faktury w %d prób.", maxAttempts)
+	return nil, fmt.Errorf("Doszło do timeoutu po %d próbach, ostatni znany błąd to %v.", maxAttempts, lastErr)
 }
 
 func (c *Client) DownloadUPO(upoUrl string) ([]byte, error) {

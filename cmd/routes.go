@@ -25,7 +25,9 @@ func (app *application) routes() http.Handler {
 	fs := http.FileServer(http.Dir("./ui/static/"))
 	mux.Handle("/static/", http.StripPrefix("/static", fs))
 	mux.HandleFunc("GET /{$}", app.home)
-	mux.HandleFunc("GET /ui/invoices", app.getDashboardInvoices)
+	mux.HandleFunc("GET /ui/invoices", app.getDashboard)
+	mux.HandleFunc("GET /ui/invoice", app.getInvoice)
+	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
 	return mux
 }
 
@@ -79,11 +81,49 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/ui/invoices", http.StatusSeeOther)	
 }
 
+func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
+	filter := r.URL.Query().Get("status")
+	// will make it configurable
+	pageSize := 50
+	pageRaw := r.URL.Query().Get("page")
+	data, err := app.dashboardHelper(filter, pageRaw, pageSize) 
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		return
+	}
+	app.renderer.render(w, "base", data)
+}
+
 func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
 	// will make it configurable
 	pageSize := 50
-	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	pageRaw := r.URL.Query().Get("page")
+	data, err := app.dashboardHelper(filter, pageRaw, pageSize) 
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		return
+	}
+	app.infoLog.Printf("Załadowano strona %d, filtr %s", data.Page, data.CurrentFilter)
+	app.renderer.render(w, "invoice-table", data)
+}
+
+func (app *application) getInvoice(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		return
+	}
+	invoice, err := app.invoices.GetInvoice(int64(id))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd przy pozyskiwaniu faktury: %v", err), http.StatusNotFound)
+		return
+	}
+	app.renderer.render(w, "invoice-container", invoice)
+}
+
+func (app *application) dashboardHelper(filter, pageRaw string, pageSize int) (dashboardData, error) {
+	page, err := strconv.Atoi(pageRaw)
 	if err != nil || page < 1 {
 		page = 1
 	}
@@ -93,13 +133,12 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 	}
 	invoices, err := app.invoices.GetAllInvoices(filter, page, pageSize+1)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
-		return
+		return dashboardData{}, err
 	}
 	more := false
 	if len(invoices) > pageSize {
 		more = true
-		invoices = invoices[:50]
+		invoices = invoices[:pageSize]
 	}
 	data := dashboardData{
 		Invoices: invoices,
@@ -109,10 +148,5 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 		NextPage: page+1,
 		More: more,
 	}
-	app.infoLog.Printf("Załadowano strona %d, filtr %s", data.Page, data.CurrentFilter)
-	if r.Header.Get("HX-Request") != "" {
-		app.renderer.render(w, "main-page", data)
-		return
-	}
-	app.renderer.render(w, "base", data)
+	return data, nil
 }

@@ -37,9 +37,9 @@ type InvoiceModel struct {
 
 func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 	if inv.CreatedAt.IsZero() {
-		inv.CreatedAt = time.Now()
+		inv.CreatedAt = time.Now().UTC()
 	}
-	inv.UpdatedAt = time.Now()
+	inv.UpdatedAt = time.Now().UTC()
 	inv.KsefErr = nil
 	inv.KsefId = nil
 	inv.AttemptCount = 0
@@ -89,7 +89,7 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 		return nil, sql.ErrNoRows
 	}
 	for _, id := range idsToUpdate {
-		_, err := transaction.Exec("UPDATE Invoices SET status = ?, updated_at = ? WHERE id = ?", StatusProcessing, time.Now(), id)
+		_, err := transaction.Exec("UPDATE Invoices SET status = ?, updated_at = ? WHERE id = ?", StatusProcessing, time.Now().UTC(), id)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +129,7 @@ func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
 		return nil, sql.ErrNoRows
 	}
 	for _, id := range idsToUpdate {
-		_, err := transaction.Exec("UPDATE Invoices SET status = ?, updated_at = ? WHERE id = ?", StatusProcessing, time.Now(), id)
+		_, err := transaction.Exec("UPDATE Invoices SET status = ?, updated_at = ? WHERE id = ?", StatusProcessing, time.Now().UTC(), id)
 		if err != nil {
 			return nil, err
 		}
@@ -142,31 +142,31 @@ func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
 
 func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId, upo_xml string) error {
 	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, upo_xml = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now(), id)
+	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now().UTC(), id)
 	return err
 }
 
 func (m *InvoiceModel) UpdateRetryInvoice(id int64, ksefErr string) error {
 	stmt := "UPDATE Invoices SET status = ?, attempt_count = attempt_count + 1, ksef_error = ?, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusPending, ksefErr, time.Now(), id)
+	_, err := m.DB.Exec(stmt, StatusPending, ksefErr, time.Now().UTC(), id)
 	return err
 }
 
 func (m *InvoiceModel) UpdateFailedInvoice(id int64, ksefErr string) error {
 	stmt := "UPDATE Invoices SET status = ?, ksef_error = ?, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusFailed, ksefErr, time.Now(), id)
+	_, err := m.DB.Exec(stmt, StatusFailed, ksefErr, time.Now().UTC(), id)
 	return err
 }
 
 func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?  WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusPending, time.Now(), id)
+	_, err := m.DB.Exec(stmt, StatusPending, time.Now().UTC(), id)
 	return err
 }
 
 func (m *InvoiceModel) UpdateUnknownInvoice(id int64, submissionReference string)error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?, submission_reference = ?  WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusUnknown, time.Now(), submissionReference, id)
+	_, err := m.DB.Exec(stmt, StatusUnknown, time.Now().UTC(), submissionReference, id)
 	return err
 }
 
@@ -183,7 +183,7 @@ func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoic
 			return nil, fmt.Errorf("Niepoprawny filtr: %s.", filter)
 		}
 	} 
-	pageOffset := (page-1) * (limit-1)
+	pageOffset := (page-1) * limit
 	args = append(args, limit, pageOffset)	
 	stmt += "ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	rows, err := m.DB.Query(stmt, args...)

@@ -1,0 +1,42 @@
+{{ define "invoice-table" }}
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="p-4 text-left text-xs font-semibold uppercase">ID Zewn.</th>
+                        <th class="p-4 text-left text-xs font-semibold uppercase">Status</th>
+                        <th class="p-4 text-left text-xs font-semibold uppercase">ID KSeF</th>
+                        <th class="p-4 text-center text-xs font-semibold uppercase">Próby</th>
+                        <th class="p-4 text-center text-xs font-semibold uppercase">Data aktualizacji</th>
+                        <th class="p-4 text-center text-xs font-semibold uppercase">Data utworzenia</th>
+                        <th class="p-4 text-center text-xs font-semibold uppercase">ZOBACZ</th>
+                    </tr>
+                </thead>
+                <tbody id="invoice-rows">
+                    {{ template "invoice-rows" . }}
+                </tbody>
+            </table>
+        </div>
+
+<div class="flex justify-between items-center py-2">
+        {{ if ne .Page 1 }}
+        <button hx-get="/ui/invoices?status={{.CurrentFilter}}&page={{.PrevPage}}" hx-target="#main-content" class="text-sm font-medium text-white hover:underline">
+            Poprzednia
+        </button>
+        {{ else }}
+        <span class="text-sm font-medium text-gray-400 cursor-not-allowed">
+            Poprzednia
+        </span>
+        {{ end }}
+        
+        <span class="text-white">Strona {{.Page}}</span>
+        {{ if .More }}
+        <button hx-get="/ui/invoices?status={{.CurrentFilter}}&page={{.NextPage}}" hx-target="#main-content" class="text-sm font-medium text-white hover:underline">
+            Następna
+        </button>
+        {{ else }}
+        <span class="text-sm font-medium text-gray-400 cursor-not-allowed">
+            Następna
+        </span>
+    {{ end }}
+{{ end }}

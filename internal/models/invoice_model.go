@@ -140,7 +140,7 @@ func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
 	return invoices, nil
 }
 
-func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId, upo_xml string) error {
+func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId, upo_xml, submissionReference string) error {
 	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, upo_xml = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
 	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now().UTC(), id)
 	return err

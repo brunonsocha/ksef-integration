@@ -1,8 +1,71 @@
 {{ define "invoice-container" }}
-<div class="space-y-4 bg-white rounded-lg shadow">
-    <div class="container mx-auto">
-        <h1 class="font-bold">{{ .ExternalId }}</h1>
+<div class="w-full min-w-0 bg-white rounded-lg shadow overflow-hidden">
+    <div class="bg-gray-50 border-b p-4">
+        <h2 class="text-lg font-bold">{{ .ExternalId }}</h2>
+        <p class="text-sm text-gray-500">Szczegóły faktury</p>
+    </div>
+
+    <div class="p-4 space-y-6">
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">Podstawowe informacje</h3>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="font-semibold">ID:</span>
+                    <span>{{ .Id }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Status:</span>
+                    <span>{{ .Status }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Próby:</span>
+                    <span>{{ .AttemptCount }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Data utworzenia:</span>
+                    <span>{{ .CreatedAt.Local.Format "2006-01-02 15:04" }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Data aktualizacji:</span>
+                    <span>{{ .UpdatedAt.Local.Format "2006-01-02 15:04" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">KSeF</h3>
+            <div class="grid grid-cols-1 gap-3 text-sm">
+                <div>
+                    <span class="font-semibold">ID KSeF:</span>
+                    <span>{{ if .KsefId }}{{ .KsefId }}{{ else }}-{{ end }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Submission reference:</span>
+                    <span>{{ if .SubmissionReference }}{{ .SubmissionReference }}{{ else }}-{{ end }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Błąd KSeF:</span>
+                    <div class="mt-1 text-red-500">
+                        {{ if .KsefErr }}{{ .KsefErr }}{{ else }}-{{ end }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">Raw JSON</h3>
+            <pre class="w-full min-w-0 bg-gray-50 border rounded p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">{{ .RawJson }}</pre>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">Raw XML</h3>
+            <pre class="w-full min-w-0 bg-gray-50 border rounded p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">{{ .RawXml }}</pre>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">UPO XML</h3>
+            <pre class="w-full min-w-0 bg-gray-50 border rounded p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">{{ if .UpoXml }}{{ .UpoXml }}{{ else }}Brak UPO{{ end }}</pre>
+        </div>
     </div>
 </div>
 {{ end }}
-

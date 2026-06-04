@@ -176,7 +176,7 @@ func (app *application) confirmInvoice(inv *models.Invoice, inSessionRef string)
 			upoXmlData = string(upoBytes)
 		}
 	}
-	if err = app.invoices.UpdateSentInvoice(inv.Id, *statusRes.KsefNumber, upoXmlData); err != nil {
+	if err = app.invoices.UpdateSentInvoice(inv.Id, *statusRes.KsefNumber, upoXmlData, *inv.SubmissionReference); err != nil {
 		app.errorLog.Printf("Błąd przy zapisie statusu wysłanej faktury: %v", err)
 	} else {
 		app.infoLog.Printf("Wysłano i zatwierdzono wysyłkę faktury o ID %d", inv.Id)

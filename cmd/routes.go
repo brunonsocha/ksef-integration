@@ -91,6 +91,10 @@ func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
 	}
+	if r.Header.Get("HX-Request") != "" {
+		app.renderer.render(w, "main-page", data)
+		return
+	}
 	app.renderer.render(w, "base", data)
 }
 

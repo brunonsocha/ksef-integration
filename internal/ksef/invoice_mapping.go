@@ -34,8 +34,8 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	if i.Currency == nil || len(*i.Currency) != 3 {
 		return errors.New("Incorrect currency data.")
 	}
-	if *i.Currency != "PLN" && i.ExchangeRate == nil {
-		return errors.New("Missing exchange rate for the currency.")
+	if (*i.Currency != "PLN" && i.ExchangeRate == nil) || (*i.Currency == "PLN" && i.ExchangeRate != nil) {
+		return errors.New("Missing data for the chosen currency (exchange rate was specified for PLN or unspecified for foreign).")
 	}
 	if len(i.Items) == 0 {
 		return errors.New("Empty invoice.")
@@ -82,6 +82,31 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	}
 	if i.Buyer.Name != nil && i.Buyer.CountryCode == nil {
 		i.Buyer.CountryCode = &defaultCountryCode
+	}
+	totalNet := 0.0
+	for _, j := range i.Items {
+		totalNet += j.NetAmount
+	}
+	totalNetTax := 0.0
+	totalTax := 0.0
+	for _, k := range i.TaxBreakdowns {
+		requiresTax := true
+		totalNetTax += k.NetAmount
+		switch k.TaxRate {
+		case TaxRateZW, TaxRateOO, TaxRateNPII, TaxRateNPI, TaxRate0KR, TaxRate0EX, TaxRate0WDT:
+			if k.TaxAmount != nil {
+				return errors.New("Tax amount incorrect for the 0% tax rate.")
+			}
+			requiresTax = false
+		}
+		if k.TaxAmount != nil && requiresTax {
+			totalTax += *k.TaxAmount
+		} else if k.TaxAmount == nil && requiresTax {
+			return errors.New("Tax amount missing for non-0 tax rate.")
+		}
+	}
+	if totalNet != totalNetTax || totalNet+totalTax != i.TotalAmount {
+		return fmt.Errorf("Incorrect line items. Total netto in line items: %f, total netto in tax breakdowns: %f, total tax: %f, total amount: %f.", totalNet, totalNetTax, totalTax, i.TotalAmount)
 	}
 	return nil
 }

@@ -8,10 +8,10 @@
         <button hx-get="/ui/invoices?status=FAILED&page=1" hx-target="#main-content" class="bg-red-300 px-3 py-1 rounded shadow-sm text-sm">Niewysłane</button>
     </div>
     <div id="table-container" hx-get="/ui/invoicetable?status={{ .CurrentFilter }}&page={{ .Page }}" hx-trigger="every 10s" hx-target="#table-container">
+        {{ template "invoice-table" . }}
     </div>
 
-    </div>
-    <div id="invoice-target" class="flex gap-2">
+    <div id="invoice-target" class="min-w-0">
     </div>
 </div>
 {{ end }}

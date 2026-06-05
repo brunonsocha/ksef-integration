@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+	xsdvalidate "github.com/terminalstatic/go-xsd-validate"
 	_ "modernc.org/sqlite"
 )
 
@@ -23,6 +23,7 @@ type application struct {
 	config *config.Config
 	ksefClient *ksef.Client
 	renderer *renderer
+	xsdValidator *xsdvalidate.XsdHandler
 }
 
 func main() {	
@@ -51,6 +52,16 @@ func main() {
 		errorLog.Fatal(err)
 	}
 	infoLog.Printf("Załadowano bazę danych")
+	if err := xsdvalidate.Init(); err != nil {
+		errorLog.Fatal(err)
+	}
+	defer xsdvalidate.Cleanup()
+	xsdValidator, err := xsdvalidate.NewXsdHandlerUrl(cfg.XSDPath, xsdvalidate.ParsErrDefault)
+	if err != nil {
+		errorLog.Fatal(err)
+	}
+	defer xsdValidator.Free()
+	infoLog.Printf("Załadowano narzędzie do walidacji XML.")
 	app := &application{
 		infoLog: infoLog,
 		errorLog: errorLog,
@@ -60,6 +71,7 @@ func main() {
 		config: cfg,
 		ksefClient: ksef.NewClient(cfg.Ksef.Nip, cfg.Ksef.Token, cfg.Ksef.Public_key_path, cfg.Ksef.Url),
 		renderer: newRenderer(),
+		xsdValidator: xsdValidator,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

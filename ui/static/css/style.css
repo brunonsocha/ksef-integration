@@ -191,6 +191,12 @@
   }
 }
 @layer utilities {
+  .collapse {
+    visibility: collapse;
+  }
+  .fixed {
+    position: fixed;
+  }
   .start {
     inset-inline-start: var(--spacing);
   }

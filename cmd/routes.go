@@ -1,13 +1,17 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/http"
 	"strconv"
+
+	xsdvalidate "github.com/terminalstatic/go-xsd-validate"
 )
 
 type dashboardData struct {
@@ -28,6 +32,7 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("GET /ui/invoices", app.getDashboard)
 	mux.HandleFunc("GET /ui/invoice", app.getInvoice)
 	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
+	mux.HandleFunc("DELETE /deleteinvoice", app.deleteInvoice)
 	return mux
 }
 
@@ -55,6 +60,11 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.errorLog.Printf("Wystąpił błąd przy transformacji w XML: %v", err)
 		http.Error(w, "Błąd przy XML", http.StatusInternalServerError)
+		return
+	}
+	if err := app.xsdValidator.ValidateMem(xmlcontent, xsdvalidate.ValidErrDefault); err != nil {
+		app.errorLog.Printf("Wystąpił błąd przy walidacji struktury otrzymanej faktury w postaci XML - %v.", err)
+		http.Error(w, "Błąd przy walidacji wytworzonego XML.", http.StatusUnprocessableEntity)
 		return
 	}
 	
@@ -153,4 +163,21 @@ func (app *application) dashboardHelper(filter, pageRaw string, pageSize int) (d
 		More: more,
 	}
 	return data, nil
+}
+
+func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := app.invoices.DeleteInvoice(int64(id)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

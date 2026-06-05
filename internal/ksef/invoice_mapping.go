@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -26,8 +27,22 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 		if i.OriginalInvoiceNumber == nil || i.CorrectionReason == nil || i.OriginalKsefId == nil {
 			return errors.New("Missing details (correction data).")
 		}
+		if i.OriginalIssueDate == nil {
+			return errors.New("Missing original issue date on a corrective invoice.")
+		}
+		_, err := time.Parse("2006-01-02", *i.OriginalIssueDate)
+		if err != nil {
+			return errors.New("Invalid date format (original issue date).")
+		}
+		if i.CorrectedBuyer != nil && (i.CorrectedBuyer.Name == nil || i.CorrectedBuyer.AddressLine1 == nil || !validateNIP(i.CorrectedBuyer.Nip)) {
+			return errors.New("Missing data for corrected buyer/")
+		}
+		if i.CorrectedBuyer != nil && i.CorrectedBuyer.CountryCode == nil {
+			cc := "PL"
+			i.CorrectedBuyer.CountryCode = &cc
+		}
 	} else {
-		if i.OriginalInvoiceNumber != nil || i.CorrectionReason != nil || i.OriginalKsefId != nil {
+		if i.OriginalInvoiceNumber != nil || i.CorrectionReason != nil || i.OriginalKsefId != nil || i.OriginalIssueDate != nil || i.CorrectedBuyer != nil {
 			return errors.New("Incorrect details (correction data on non-corrective invoice).")
 		}
 	}
@@ -55,7 +70,7 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 			return errors.New("Invalid tax rate (line items.")
 		}
 	}
-	if len(i.Buyer.Nip) != 10 || len(i.Seller.Nip) != 10 {
+	if !validateNIP(i.Buyer.Nip) || !validateNIP(i.Seller.Nip) {
 		return errors.New("Incorrect NIP values.")
 	}
 	if i.Seller.Name == nil || i.Seller.AddressLine1 == nil {
@@ -162,24 +177,41 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 		fa.Podmiot1.Adres.AdresL2 = *inv.Seller.AddressLine2
 	}
 
-	if inv.Buyer.Name != nil && inv.Buyer.AddressLine1 != nil {
+	if (inv.InvoiceType == InvoiceTypeKOR || inv.InvoiceType == InvoiceTypeKORZAL || inv.InvoiceType == InvoiceTypeKORROZ) && inv.CorrectedBuyer != nil {
 		fa.Podmiot2 = &Podmiot2{
 			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
-				NIP: inv.Buyer.Nip,
-				Nazwa: *inv.Buyer.Name,
+				NIP: inv.CorrectedBuyer.Nip,
+				Nazwa: *inv.CorrectedBuyer.Name,
 			},
 			Adres: &Adres{
-				KodKraju: *inv.Buyer.CountryCode,
-				AdresL1: *inv.Buyer.AddressLine1,
+				KodKraju: *inv.CorrectedBuyer.CountryCode,
+				AdresL1: *inv.CorrectedBuyer.AddressLine1,
 			},
 			JST: 2,
 			GV: 2,
 		}
-		if inv.Buyer.AddressLine2 != nil {
-			fa.Podmiot2.Adres.AdresL2 = *inv.Buyer.AddressLine2
+		if inv.CorrectedBuyer.AddressLine2 != nil {
+			fa.Podmiot2.Adres.AdresL2 = *inv.CorrectedBuyer.AddressLine2
+		}
+	} else {
+		if inv.Buyer.Name != nil && inv.Buyer.AddressLine1 != nil {
+			fa.Podmiot2 = &Podmiot2{
+				DaneIdentyfikacyjne: DaneIdentyfikacyjne{
+					NIP: inv.Buyer.Nip,
+					Nazwa: *inv.Buyer.Name,
+				},
+				Adres: &Adres{
+					KodKraju: *inv.Buyer.CountryCode,
+					AdresL1: *inv.Buyer.AddressLine1,
+				},
+				JST: 2,
+				GV: 2,
+			}
+			if inv.Buyer.AddressLine2 != nil {
+				fa.Podmiot2.Adres.AdresL2 = *inv.Buyer.AddressLine2
+			}
 		}
 	}
-	
 
 	for _, item := range inv.Items {
 		w := FaWiersz{
@@ -206,7 +238,7 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 		fa.Fa.PrzyczynaKorekty = *inv.CorrectionReason
 		fa.Fa.TypKorekty = 3
 		fa.Fa.DaneFaKorygowanej = &DaneFaKorygowanej{
-			DataWystFaKorygowanej: inv.IssueDate,
+			DataWystFaKorygowanej: *inv.OriginalIssueDate,
 			NrFaKorygowanej:       *inv.OriginalInvoiceNumber,
 			NrKSeF: 1,
 			NrKSeFFaKorygowanej:   *inv.OriginalKsefId,
@@ -261,3 +293,18 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 	return payload, nil
 }
 
+func validateNIP(nip string) bool {
+	if len(nip) != 10 {
+		return false
+	}
+	weights := []int{6, 5, 7, 2, 3, 4, 5, 6, 7}
+	sum := 0
+	for i := 0; i < len(weights); i++ {
+		val, err := strconv.Atoi(string(nip[i]))
+		if err != nil {
+			return false
+		}
+		sum += val*weights[i]
+	} 
+	return sum % 11 != 10 && strconv.Itoa(sum % 11) == string(nip[len(nip)-1])
+}

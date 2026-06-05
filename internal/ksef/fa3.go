@@ -1,6 +1,8 @@
 package ksef
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+)
 
 type Faktura struct {
 	XMLName xml.Name `xml:"Faktura"`

@@ -4,6 +4,7 @@ type InvoiceReceived struct {
 	InvoiceType InvoiceType `json:"invoice_type"`
 	InvoiceNumber string `json:"invoice_number"`
 	IssueDate string `json:"issue_date"`
+	OriginalIssueDate *string `json:"original_issue_date"`
 	Currency *string `json:"currency"`
 	ExchangeRate *float64 `json:"exchange_rate"`
 	TotalAmount float64 `json:"total_amount"`

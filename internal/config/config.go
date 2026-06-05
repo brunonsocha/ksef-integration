@@ -31,6 +31,7 @@ type Config struct {
 	User struct {
 		Max_retries int `yaml:"max_retries"`
 	} `yaml:"user"`
+	XSDPath string `yaml:"xsd_path"`
 }
 
 // supposedly, passing in filepaths is a codesmell

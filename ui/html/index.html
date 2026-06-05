@@ -15,28 +15,3 @@
     </div>
 </div>
 {{ end }}
-
-{{ define "invoice-rows" }}
-    {{ range .Invoices }}
-    <tr class="border-b hover:bg-gray-50 transition-colors">
-        <td class="p-4 text-sm">{{ .ExternalId }}</td>
-        <td class="p-4 text-sm font-bold">{{ .Status }}</td>
-        <td class="p-4 text-sm">
-            {{ if .KsefId }}{{ .KsefId }}{{ else }}<span class="text-gray-400 text-xs">-</span>{{ end }}
-            {{ if .KsefErr }}
-                <div class="text-[10px] text-red-500 italic mt-1">{{ .KsefErr }}</div>
-            {{ end }}
-        </td>
-        <td class="p-4 text-sm text-center">{{ .AttemptCount }}</td>
-        <td class="p-4 text-sm text-center text-gray-500">{{ .UpdatedAt.Local.Format "2006-01-02 15:04" }}</td>
-        <td class="p-4 text-sm text-center text-gray-500">{{ .CreatedAt.Local.Format "2006-01-02 15:04" }}</td>
-        <td class="p-4 text-sm text-center">
-          <button hx-get="/ui/invoice?id={{ .Id }}" hx-target="#invoice-target" hx-swap="innerHTML" class="underline text-blue-700 hover:no-underline cursor-pointer">Podgląd</button>
-        </td>
-    </tr>
-    {{ else }}
-    <tr>
-        <td colspan="7" class="p-10 text-center text-gray-400">Brak faktur...</td>
-    </tr>
-    {{ end }}
-{{ end }}

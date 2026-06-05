@@ -141,8 +141,8 @@ func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
 }
 
 func (m *InvoiceModel) UpdateSentInvoice(id int64, ksefId, upo_xml, submissionReference string) error {
-	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, upo_xml = ?, ksef_error = NULL, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now().UTC(), id)
+	stmt := "UPDATE Invoices SET status = ?, ksef_id = ?, upo_xml = ?, ksef_error = NULL, updated_at = ?, submission_reference = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, StatusSent, ksefId, upo_xml, time.Now().UTC(), submissionReference, id)
 	return err
 }
 
@@ -167,6 +167,22 @@ func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 func (m *InvoiceModel) UpdateUnknownInvoice(id int64, submissionReference string)error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?, submission_reference = ?  WHERE id = ?"
 	_, err := m.DB.Exec(stmt, StatusUnknown, time.Now().UTC(), submissionReference, id)
+	return err
+}
+
+func (m *InvoiceModel) DeleteInvoice(id int64) error {
+	stmt := "DELETE FROM Invoices WHERE id = ? AND status = ?"
+	rows, err := m.DB.Exec(stmt, id, StatusFailed)
+	if err != nil {
+		return err
+	}
+	num, err := rows.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if num == 0 {
+		return sql.ErrNoRows
+	}
 	return err
 }
 

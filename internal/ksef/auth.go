@@ -9,67 +9,67 @@ import (
 )
 
 type ChallengeResponse struct {
-	Challenge string `json:"challenge"`
-	Timestamp time.Time `json:"timestamp"`
-	TimestampMs int64 `json:"timestampMs"`
+	Challenge   string    `json:"challenge"`
+	Timestamp   time.Time `json:"timestamp"`
+	TimestampMs int64     `json:"timestampMs"`
 }
 
 type AuthenticationPayload struct {
-	Challenge string `json:"challenge"`
+	Challenge         string            `json:"challenge"`
 	ContextIdentifier ContextIdentifier `json:"contextIdentifier"`
-	EncryptedToken []byte `json:"encryptedToken"`
+	EncryptedToken    []byte            `json:"encryptedToken"`
 }
 
 type ContextIdentifier struct {
-	Type string `json:"type"`
+	Type  string `json:"type"`
 	Value string `json:"value"`
 }
 
 type AuthenticationResponse struct {
-	ReferenceNumber string `json:"referenceNumber"`
+	ReferenceNumber     string `json:"referenceNumber"`
 	AuthenticationToken struct {
-		Token string `json:"token"`
+		Token      string    `json:"token"`
 		ValidUntil time.Time `json:"validUntil"`
 	} `json:"authenticationToken"`
 }
 
 type RedeemResponse struct {
 	AccessToken struct {
-		Token string `json:"token"`
+		Token      string    `json:"token"`
 		ValidUntil time.Time `json:"validUntil"`
 	} `json:"accessToken"`
 	RefreshToken struct {
-		Token string `json:"token"`
+		Token      string    `json:"token"`
 		ValidUntil time.Time `json:"validUntil"`
 	}
 }
 
 type RefreshResponse struct {
 	AccessToken struct {
-		Token string `json:"token"`
+		Token      string    `json:"token"`
 		ValidUntil time.Time `json:"validUntil"`
 	} `json:"accessToken"`
 }
 
 type InteractiveSessionPayload struct {
-	FormCode SessionFormCode `json:"formCode"`
-	Encryption Encryption `json:"encryption"`
+	FormCode   SessionFormCode `json:"formCode"`
+	Encryption Encryption      `json:"encryption"`
 }
 
 type SessionFormCode struct {
-	SystemCode string `json:"systemCode"`
+	SystemCode    string `json:"systemCode"`
 	SchemaVersion string `json:"schemaVersion"`
-	Value string `json:"value"`
+	Value         string `json:"value"`
 }
 
 type Encryption struct {
 	EncryptedSymmetricKey []byte `json:"encryptedSymmetricKey"`
-	InitializationVector []byte `json:"initializationVector"`
+	InitializationVector  []byte `json:"initializationVector"`
 }
 
 type InteractiveSessionResponse struct {
-	ReferenceNumber string `json:"referenceNumber"`
-	ValidUntil time.Time `json:"validUntil"`
+	ReferenceNumber string    `json:"referenceNumber"`
+	ValidUntil      time.Time `json:"validUntil"`
 }
 
 func (c *Client) getChallenge() (*ChallengeResponse, error) {
@@ -99,7 +99,7 @@ func (c *Client) startSession(encryptedToken []byte, cha *ChallengeResponse) (*A
 	payload := AuthenticationPayload{
 		Challenge: cha.Challenge,
 		ContextIdentifier: ContextIdentifier{
-			Type: "Nip",
+			Type:  "Nip",
 			Value: c.NIP,
 		},
 		EncryptedToken: encryptedToken,
@@ -133,12 +133,12 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 	posturl := c.ApiURL + "/auth/token/redeem"
 	for i := 0; i < 10; i++ {
 		r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
-		
+
 		if err != nil {
 			return nil, err
 		}
 		r.Header.Set("Accept", "application/json")
-		r.Header.Set("Authorization", "Bearer " + authRes.AuthenticationToken.Token)
+		r.Header.Set("Authorization", "Bearer "+authRes.AuthenticationToken.Token)
 		r.Header.Set("Content-Type", "application/json")
 		response, err := c.httpClient.Do(r)
 		if err != nil {
@@ -154,7 +154,7 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 		}
 		response.Body.Close()
 		if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusTooManyRequests {
-			time.Sleep(time.Second * 2)
+			time.Sleep(c.AuthRetryDelay)
 			continue
 		}
 		return nil, fmt.Errorf("KSeF nie zwrócił tokena - błąd %d", response.StatusCode)
@@ -173,7 +173,7 @@ func (c *Client) refreshToken() error {
 		return err
 	}
 	r.Header.Set("Accept", "application/json")
-	r.Header.Set("Authorization", "Bearer " + c.RefreshToken)
+	r.Header.Set("Authorization", "Bearer "+c.RefreshToken)
 	r.Header.Set("Content-Type", "application/json")
 	response, err := c.httpClient.Do(r)
 	if err != nil {
@@ -238,7 +238,6 @@ func (c *Client) ExecuteRequestTokenCheck(r *http.Request) (*http.Response, erro
 	if err := c.checkToken(); err != nil {
 		return nil, err
 	}
-	r.Header.Set("Authorization", "Bearer " + c.SessionToken)
+	r.Header.Set("Authorization", "Bearer "+c.SessionToken)
 	return c.httpClient.Do(r)
 }
-

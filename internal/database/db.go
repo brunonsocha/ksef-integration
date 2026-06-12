@@ -2,13 +2,14 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
 
-func Connect(dbPath string) (*sql.DB, error) {
+func Connect(dbPath string, busyTimeoutMs int) (*sql.DB, error) {
 	dirPath := filepath.Dir(dbPath)
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(dirPath, 0755); err != nil {
@@ -24,7 +25,7 @@ func Connect(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	concurrencySafe := `PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;`
+	concurrencySafe := fmt.Sprintf("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = %d; PRAGMA foreign_keys = ON;", busyTimeoutMs)
 	if _, err := db.Exec(concurrencySafe); err != nil {
 		return nil, err
 	}

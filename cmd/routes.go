@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"ksef-integration/internal/models"
 	"net/http"
 	"strconv"
+	"time"
 
 	xsdvalidate "github.com/terminalstatic/go-xsd-validate"
 )
@@ -33,6 +35,8 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("GET /ui/invoice", app.getInvoice)
 	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
 	mux.HandleFunc("DELETE /deleteinvoice", app.deleteInvoice)
+	mux.HandleFunc("GET /health/live", app.getHealthLive)
+	mux.HandleFunc("GET /health/ready", app.getHealthReady)
 	return mux
 }
 
@@ -76,7 +80,7 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	id, err := app.invoices.InsertInvoice(dbInv)
 	if err != nil {
 		app.errorLog.Printf("Błąd bazy danych: %v", err)
-		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusBadGateway)
+		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -93,10 +97,8 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
-	// will make it configurable
-	pageSize := 50
 	pageRaw := r.URL.Query().Get("page")
-	data, err := app.dashboardHelper(filter, pageRaw, pageSize) 
+	data, err := app.dashboardHelper(filter, pageRaw, app.config.DashPageSize) 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
@@ -110,10 +112,8 @@ func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
-	// will make it configurable
-	pageSize := 50
 	pageRaw := r.URL.Query().Get("page")
-	data, err := app.dashboardHelper(filter, pageRaw, pageSize) 
+	data, err := app.dashboardHelper(filter, pageRaw, app.config.DashPageSize) 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
@@ -179,5 +179,24 @@ func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("HX-Trigger", "refreshInvoices")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (app *application) getHealthLive(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *application) getHealthReady(w http.ResponseWriter, r *http.Request) {
+	if app.xsdValidator == nil {
+		http.Error(w, "Narzędzie do walidacji plików XML nie jest uruchomione.", http.StatusServiceUnavailable)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := app.invoices.DB.PingContext(ctx); err != nil {
+		http.Error(w, "Wystąpił problem z połączeniem z bazą danych.", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

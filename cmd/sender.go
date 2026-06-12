@@ -13,10 +13,9 @@ import (
 
 func (app *application) startSender(ctx context.Context) {
 	app.infoLog.Printf("Rozpoczynanie procesu...")
-	// the loop does the check every 30 secs
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(time.Duration(app.config.PollingInterval) * time.Second)
 	defer ticker.Stop()
-	taskLimit := 5 // will make it configurable with a recommended range after testing
+	taskLimit := app.config.SenderWorkerLimit
 	taskChan := make(chan struct{}, taskLimit)
 	for {
 		select {
@@ -31,7 +30,7 @@ func (app *application) startSender(ctx context.Context) {
 }
 
 func (app *application) sendInvoice(c chan struct{}) {
-	invoices, err := app.invoices.GetPendingInvoicesConc(50) // will make it configurable as well
+	invoices, err := app.invoices.GetPendingInvoicesConc(app.config.SenderBatchSize)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			app.errorLog.Printf("Błąd przy pozyskiwaniu faktur: %v", err)
@@ -59,8 +58,8 @@ func (app *application) sendInvoice(c chan struct{}) {
 		go func(invoiceToProcess *models.Invoice) {
 			defer wg.Done()
 			c <- struct{}{}
-			defer func(){
-				<- c
+			defer func() {
+				<-c
 			}()
 			app.processInvoice(invoiceToProcess, inSession)
 		}(inv)
@@ -74,48 +73,47 @@ func (app *application) sendInvoice(c chan struct{}) {
 }
 
 func (app *application) checkUnknownInvoices(c chan struct{}) {
-		invoices, err := app.invoices.GetUnknownInvoicesConc(50)
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				app.errorLog.Printf("Błąd przy pozyskiwaniu faktur o nieznanym statusie: %v", err)
-			}
-			return
+	invoices, err := app.invoices.GetUnknownInvoicesConc(app.config.SenderBatchSize)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			app.errorLog.Printf("Błąd przy pozyskiwaniu faktur o nieznanym statusie: %v", err)
 		}
-		app.infoLog.Printf("Odnaleziono %d faktur o nieznanym statusie. Sprawdzanie statusu.", len(invoices))
-		inSession, err := app.ksefClient.OpenInSession()
-		if err != nil {
-			app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
-			for _, inv := range invoices {
-				if networkCheck(err) {
-					if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
-						app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
-					}
-				} else {
-					app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
-				}
-			}
-			return
-		}
-		var wg sync.WaitGroup
+		return
+	}
+	app.infoLog.Printf("Odnaleziono %d faktur o nieznanym statusie. Sprawdzanie statusu.", len(invoices))
+	inSession, err := app.ksefClient.OpenInSession()
+	if err != nil {
+		app.errorLog.Printf("Błąd przy otwieraniu sesji interaktywnej: %v", err)
 		for _, inv := range invoices {
-			wg.Add(1)
-			go func(inv *models.Invoice) {
-				defer wg.Done()
-				c <- struct{}{}
-				defer func(){
-					<- c
-				}()
-				app.confirmInvoice(inv, inSession.InSessionRef)
-			}(inv)
+			if networkCheck(err) {
+				if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
+					app.errorLog.Printf("Wystąpił błąd przy aktualizacji faktury o ID: %d", inv.Id)
+				}
+			} else {
+				app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
+			}
 		}
-		wg.Wait()
-		if err := app.ksefClient.CloseInSession(inSession); err != nil {
-			app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
-			return
-		}
-		app.infoLog.Printf("Pomyślnie zamknięto sesję.")
+		return
+	}
+	var wg sync.WaitGroup
+	for _, inv := range invoices {
+		wg.Add(1)
+		go func(inv *models.Invoice) {
+			defer wg.Done()
+			c <- struct{}{}
+			defer func() {
+				<-c
+			}()
+			app.confirmInvoice(inv, inSession.InSessionRef)
+		}(inv)
+	}
+	wg.Wait()
+	if err := app.ksefClient.CloseInSession(inSession); err != nil {
+		app.errorLog.Printf("Błąd przy zamykaniu sesji: %v", err)
+		return
+	}
+	app.infoLog.Printf("Pomyślnie zamknięto sesję.")
 }
-
 
 func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSession) {
 	ref, err := app.ksefClient.SendInvoice([]byte(inv.RawXml), inSession)
@@ -148,7 +146,7 @@ func (app *application) confirmInvoice(inv *models.Invoice, inSessionRef string)
 		app.handleInvoiceFailure(inv, "BRAK DANYCH O WYSYŁCE")
 		return
 	}
-	statusRes, err := app.ksefClient.WaitForSendingConfirmation(15, inSessionRef, *inv.SubmissionReference) // config for max attempts????
+	statusRes, err := app.ksefClient.WaitForSendingConfirmation(app.config.Ksef.ConfirmationMaxAttempts, inSessionRef, *inv.SubmissionReference)
 	if err != nil {
 		if networkCheck(err) {
 			app.infoLog.Printf("Brak sieci. Wstrzymywanie faktury o ID: %d", inv.Id)

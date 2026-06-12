@@ -10,12 +10,12 @@ import (
 )
 
 type InvoicePayload struct {
-	InvoiceHash []byte `json:"invoiceHash"`
-	InvoiceSize int64 `json:"invoiceSize"`
-	EncryptedInvoiceHash []byte `json:"encryptedInvoiceHash"`
-	EncryptedInvoiceSize int64 `json:"encryptedInvoiceSize"`
+	InvoiceHash             []byte `json:"invoiceHash"`
+	InvoiceSize             int64  `json:"invoiceSize"`
+	EncryptedInvoiceHash    []byte `json:"encryptedInvoiceHash"`
+	EncryptedInvoiceSize    int64  `json:"encryptedInvoiceSize"`
 	EncryptedInvoiceContent []byte `json:"encryptedInvoiceContent"`
-	OfflineMode bool `json:"offlineMode"`
+	OfflineMode             bool   `json:"offlineMode"`
 }
 
 type InvoiceResponse struct {
@@ -23,26 +23,26 @@ type InvoiceResponse struct {
 }
 
 type InvoiceStatusRes struct {
-	OrdinalNumber int `json:"ordinalNumber"`
-	ReferenceNumber string `json:"referenceNumber"`
-	InvoiceNumber *string `json:"invoiceNumber"`
-	KsefNumber *string `json:"ksefNumber"`
-	InvoiceHash string `json:"invoiceHash"`
-	InvoiceFileName *string `json:"invoiceFileName"`
-	AcquisitionDate *string `json:"acquisitionDate"`
-	InvoicingDate string `json:"invoicingDate"`
-	PermanentStorageDate *string `json:"permanentStorageDate"`
-	UpoDownloadUrl *string `json:"upoDownloadUrl"`
+	OrdinalNumber                int     `json:"ordinalNumber"`
+	ReferenceNumber              string  `json:"referenceNumber"`
+	InvoiceNumber                *string `json:"invoiceNumber"`
+	KsefNumber                   *string `json:"ksefNumber"`
+	InvoiceHash                  string  `json:"invoiceHash"`
+	InvoiceFileName              *string `json:"invoiceFileName"`
+	AcquisitionDate              *string `json:"acquisitionDate"`
+	InvoicingDate                string  `json:"invoicingDate"`
+	PermanentStorageDate         *string `json:"permanentStorageDate"`
+	UpoDownloadUrl               *string `json:"upoDownloadUrl"`
 	UpoDownloadUrlExpirationDate *string `json:"upoDownloadUrlExpirationDate"`
-	InvoicingMode *string `json:"invoicingMode"`
-	Status Status `json:"status"`
+	InvoicingMode                *string `json:"invoicingMode"`
+	Status                       Status  `json:"status"`
 }
 
 type Status struct {
-	Code int `json:"code"`
-	Description string `json:"description"`
-	Details []string `json:"details"`
-	Extensions map[string]string `json:"extensions"`
+	Code        int               `json:"code"`
+	Description string            `json:"description"`
+	Details     []string          `json:"details"`
+	Extensions  map[string]string `json:"extensions"`
 }
 
 type pollingOutcome int
@@ -58,10 +58,10 @@ const (
 )
 
 type pollingOutcomeRes struct {
-	outcome pollingOutcome
-	statusRes *InvoiceStatusRes
+	outcome    pollingOutcome
+	statusRes  *InvoiceStatusRes
 	retryAfter time.Duration
-	err error
+	err        error
 	httpStatus int
 }
 
@@ -75,10 +75,10 @@ func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, erro
 	encInvSize := int64(len(encInvCon))
 	encInvHash := hashSHA256(encInvCon)
 	payload := InvoicePayload{
-		InvoiceHash: invHash,
-		InvoiceSize: invSize,
-		EncryptedInvoiceHash: encInvHash,
-		EncryptedInvoiceSize: encInvSize,
+		InvoiceHash:             invHash,
+		InvoiceSize:             invSize,
+		EncryptedInvoiceHash:    encInvHash,
+		EncryptedInvoiceSize:    encInvSize,
 		EncryptedInvoiceContent: encInvCon,
 	}
 	posturl := fmt.Sprintf("%s/sessions/online/%s/invoices", c.ApiURL, inSession.InSessionRef)
@@ -101,7 +101,7 @@ func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, erro
 		var errRes struct {
 			Exception struct {
 				ExceptionDetailList []struct {
-					ExceptionCode int `json:"exceptionCode"`
+					ExceptionCode        int    `json:"exceptionCode"`
 					ExceptionDescription string `json:"exceptionDescription"`
 				} `json:"exceptionDetailList"`
 			} `json:"exception"`
@@ -131,7 +131,7 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 	if err != nil {
 		return pollingOutcomeRes{
 			outcome: httpFail,
-			err: err,
+			err:     err,
 		}
 	}
 	req.Header.Set("Accept", "application/json")
@@ -139,7 +139,7 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 	if err != nil {
 		return pollingOutcomeRes{
 			outcome: temporaryFailure,
-			err: err,
+			err:     err,
 		}
 	}
 	defer res.Body.Close()
@@ -149,77 +149,77 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 	case http.StatusOK:
 		if err := json.NewDecoder(res.Body).Decode(&invStatRes); err != nil {
 			return pollingOutcomeRes{
-				outcome: badResponse,
-				err: err,
+				outcome:    badResponse,
+				err:        err,
 				httpStatus: res.StatusCode,
 			}
 		}
 		switch invStatRes.Status.Code {
 		case 100, 150:
-		// can't use a 150 constant, as the KSeF API docs say that 150 is processing. added processing just in case (102)
-			return pollingOutcomeRes {
-				outcome: processingRes,
-				statusRes: &invStatRes,
+			// can't use a 150 constant, as the KSeF API docs say that 150 is processing. added processing just in case (102)
+			return pollingOutcomeRes{
+				outcome:    processingRes,
+				statusRes:  &invStatRes,
 				httpStatus: res.StatusCode,
 			}
 		case 200:
-			return pollingOutcomeRes {
-				outcome: successRes,
-				statusRes: &invStatRes,
+			return pollingOutcomeRes{
+				outcome:    successRes,
+				statusRes:  &invStatRes,
 				httpStatus: res.StatusCode,
 			}
 		case 405, 410, 415, 430, 435, 440, 450:
 			return pollingOutcomeRes{
-				outcome: rejected,
-				statusRes: &invStatRes,
+				outcome:    rejected,
+				statusRes:  &invStatRes,
 				httpStatus: res.StatusCode,
 			}
 		case 500, 550:
 			return pollingOutcomeRes{
-				outcome: temporaryFailure,
-				statusRes: &invStatRes,
-				err: fmt.Errorf("KSeF zwrócił błąd: %s", invStatRes.Status.Description),
+				outcome:    temporaryFailure,
+				statusRes:  &invStatRes,
+				err:        fmt.Errorf("KSeF zwrócił błąd: %s", invStatRes.Status.Description),
 				httpStatus: res.StatusCode,
 			}
 		default:
 			return pollingOutcomeRes{
-				outcome: badResponse,
-				statusRes: &invStatRes,
-				err: fmt.Errorf("KSeF zwrócił nieznany błąd: %s", invStatRes.Status.Description),
+				outcome:    badResponse,
+				statusRes:  &invStatRes,
+				err:        fmt.Errorf("KSeF zwrócił nieznany błąd: %s", invStatRes.Status.Description),
 				httpStatus: res.StatusCode,
 			}
 		}
 	case http.StatusTooManyRequests:
-		retryAfter := 5*time.Second
+		retryAfter := 5 * time.Second
 		if header := res.Header.Get("Retry-After"); header != "" {
 			seconds, err := strconv.Atoi(header)
 			if err != nil {
 				return pollingOutcomeRes{
-					outcome: rateLimited,
+					outcome:    rateLimited,
 					retryAfter: retryAfter,
-					err: fmt.Errorf("KSeF otrzymał za dużo żądań."),
+					err:        fmt.Errorf("KSeF otrzymał za dużo żądań."),
 					httpStatus: res.StatusCode,
 				}
 			}
-			retryAfter = time.Duration(seconds)*time.Second
+			retryAfter = time.Duration(seconds) * time.Second
 		}
 		return pollingOutcomeRes{
-			outcome: rateLimited,
+			outcome:    rateLimited,
 			retryAfter: retryAfter,
-			err: fmt.Errorf("KSeF otrzymał za dużo żądań."),
+			err:        fmt.Errorf("KSeF otrzymał za dużo żądań."),
 			httpStatus: res.StatusCode,
 		}
 	default:
 		if res.StatusCode >= 500 {
 			return pollingOutcomeRes{
-				outcome: temporaryFailure,
-				err: fmt.Errorf("Tymczasowy błąd: %d", res.StatusCode),
+				outcome:    temporaryFailure,
+				err:        fmt.Errorf("Tymczasowy błąd: %d", res.StatusCode),
 				httpStatus: res.StatusCode,
 			}
 		}
 		return pollingOutcomeRes{
-			outcome: httpFail,
-			err: fmt.Errorf("KSeF zwrócił błąd: %d", res.StatusCode),
+			outcome:    httpFail,
+			err:        fmt.Errorf("KSeF zwrócił błąd: %d", res.StatusCode),
 			httpStatus: res.StatusCode,
 		}
 	}
@@ -236,7 +236,7 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 			if i == maxAttempts-1 {
 				return nil, UNKNOWN_STATE_ERR
 			}
-			time.Sleep(time.Second * 5)
+			time.Sleep(c.PollingDelay)
 		case successRes:
 			if pollingStatus.statusRes.KsefNumber == nil {
 				return nil, fmt.Errorf("KSeF potwierdził otrzymanie faktury, ale nie nadał numeru KSeF")
@@ -250,7 +250,7 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 			if i == maxAttempts-1 {
 				return nil, fmt.Errorf("Nie można było wysłać faktury")
 			}
-			time.Sleep(time.Second * 5)
+			time.Sleep(c.PollingDelay)
 		case httpFail, badResponse:
 			lastErr = pollingStatus.err
 			return nil, fmt.Errorf("Wystąpił błąd: %v - %d", pollingStatus.err, pollingStatus.httpStatus)

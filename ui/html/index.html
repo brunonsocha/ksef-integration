@@ -1,13 +1,19 @@
 {{ define "main-page" }}
 <div class="space-y-4">
+    <form hx-get="/ui/invoices" hx-target="#main-content" class="flex gap-2">
+        <input type="hidden" name="status" value="{{ .CurrentFilter }}">
+        <input type="hidden" name="page" value="1">
+        <input type="search" name="query" value="{{ .Query }}" placeholder="Szukaj po ID zewnętrznym" class="bg-white px-3 py-1 rounded shadow-sm text-sm min-w-0">
+        <button type="submit" class="bg-white px-3 py-1 rounded shadow-sm text-sm">Szukaj</button>
+    </form>
     <div class="flex gap-2">
-        <button hx-get="/ui/invoices?status=all&page=1" hx-target="#main-content" class="bg-white px-3 py-1 rounded shadow-sm text-sm">Wszystkie</button>
-        <button hx-get="/ui/invoices?status=PENDING&page=1" hx-target="#main-content" class="bg-blue-300 px-3 py-1 rounded shadow-sm text-sm">Oczekujące</button>
-        <button hx-get="/ui/invoices?status=PROCESSING&page=1" hx-target="#main-content" class="bg-yellow-200 px-3 py-1 rounded shadow-sm text-sm">Przetwarzane</button>
-        <button hx-get="/ui/invoices?status=SENT&page=1" hx-target="#main-content" class="bg-green-300 px-3 py-1 rounded shadow-sm text-sm">Wysłane</button>
-        <button hx-get="/ui/invoices?status=FAILED&page=1" hx-target="#main-content" class="bg-red-300 px-3 py-1 rounded shadow-sm text-sm">Niewysłane</button>
+        <button hx-get="/ui/invoices?status=all&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-white px-3 py-1 rounded shadow-sm text-sm">Wszystkie</button>
+        <button hx-get="/ui/invoices?status=PENDING&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-blue-300 px-3 py-1 rounded shadow-sm text-sm">Oczekujące</button>
+        <button hx-get="/ui/invoices?status=PROCESSING&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-yellow-200 px-3 py-1 rounded shadow-sm text-sm">Przetwarzane</button>
+        <button hx-get="/ui/invoices?status=SENT&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-green-300 px-3 py-1 rounded shadow-sm text-sm">Wysłane</button>
+        <button hx-get="/ui/invoices?status=FAILED&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-red-300 px-3 py-1 rounded shadow-sm text-sm">Niewysłane</button>
     </div>
-    <div id="table-container" hx-get="/ui/invoicetable?status={{ .CurrentFilter }}&page={{ .Page }}" hx-trigger="every 10s, refreshInvoices from:body" hx-target="#table-container">
+    <div id="table-container" hx-get="/ui/invoicetable?status={{ .CurrentFilter }}&page={{ .Page }}&query={{ .EscapedQuery }}" hx-trigger="every 10s, refreshInvoices from:body" hx-target="#table-container">
         {{ template "invoice-table" . }}
     </div>
 

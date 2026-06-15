@@ -20,7 +20,7 @@
 
 <div class="flex justify-between items-center py-2">
         {{ if ne .Page 1 }}
-        <button hx-get="/ui/invoicetable?status={{.CurrentFilter}}&page={{.PrevPage}}" hx-target="#table-container" class="text-sm font-medium text-white hover:underline">
+        <button hx-get="/ui/invoicetable?status={{.CurrentFilter}}&page={{.PrevPage}}&query={{ .EscapedQuery }}" hx-target="#table-container" class="text-sm font-medium text-white hover:underline">
             Poprzednia
         </button>
         {{ else }}
@@ -31,7 +31,7 @@
         
         <span class="text-white">Strona {{.Page}}</span>
         {{ if .More }}
-        <button hx-get="/ui/invoicetable?status={{.CurrentFilter}}&page={{.NextPage}}" hx-target="#table-container" class="text-sm font-medium text-white hover:underline">
+        <button hx-get="/ui/invoicetable?status={{.CurrentFilter}}&page={{.NextPage}}&query={{ .EscapedQuery }}" hx-target="#table-container" class="text-sm font-medium text-white hover:underline">
             Następna
         </button>
         {{ else }}

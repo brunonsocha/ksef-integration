@@ -40,21 +40,22 @@ func main() {
 		errorLog.Fatal(err)
 		// what was the point of the return here
 	}
-	infoLog.Printf("Wczytano plik konfiguracyjny")
+	infoLog.Printf("event=config_loaded")
 	if err := cfg.Validate(); err != nil {
-		errorLog.Fatalf("W trakcie walidacji pliku konfiguracyjnego wystąpił błąd (błędy): %v", err)
+		errorLog.Fatalf("event=config_validation_failed error=%q", err.Error())
 	}
+	infoLog.Printf("event=config_validated")
 	db, err := database.Connect(cfg.Sqlite.Db_path, cfg.Sqlite.BusyTimeoutMs)
 	if err != nil {
 		errorLog.Fatal(err)
 		// same here
 	}
 	defer db.Close()
-	infoLog.Printf("Połączono z bazą danych")
+	infoLog.Printf("event=db_connected db_path=%q", cfg.Sqlite.Db_path)
 	if err = database.Setup(db); err != nil {
 		errorLog.Fatal(err)
 	}
-	infoLog.Printf("Załadowano bazę danych")
+	infoLog.Printf("event=db_ready")
 	if err := xsdvalidate.Init(); err != nil {
 		errorLog.Fatal(err)
 	}
@@ -64,7 +65,7 @@ func main() {
 		errorLog.Fatal(err)
 	}
 	defer xsdValidator.Free()
-	infoLog.Printf("Załadowano narzędzie do walidacji XML.")
+	infoLog.Printf("event=xsd_validator_ready xsd_path=%q", cfg.XSDPath)
 	app := &application{
 		infoLog:  infoLog,
 		errorLog: errorLog,
@@ -91,17 +92,17 @@ func main() {
 		Handler: app.routes(),
 	}
 	go func() {
-		app.infoLog.Printf("Start serwera na porcie %s", srv.Addr)
+		app.infoLog.Printf("event=server_started addr=%q", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			app.errorLog.Fatalf("Błąd aplikacji: %v", err)
+			app.errorLog.Fatalf("event=server_failed error=%q", err.Error())
 		}
 	}()
 	<-ctx.Done()
-	app.infoLog.Printf("Zatrzymywanie aplikacji...")
+	app.infoLog.Printf("event=shutdown_started")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(app.config.ShutdownTimeoutSec)*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		app.errorLog.Fatalf("Błąd przy zamykaniu aplikacji: %v", err)
+		app.errorLog.Fatalf("event=shutdown_failed error=%q", err.Error())
 	}
-	app.infoLog.Printf("Zatrzymano aplikację.")
+	app.infoLog.Printf("event=shutdown_finished")
 }

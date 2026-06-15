@@ -5,11 +5,11 @@ import "errors"
 type InvoiceType string
 
 const (
-	InvoiceTypeVAT InvoiceType = "VAT"
-	InvoiceTypeKOR InvoiceType = "KOR"
-	InvoiceTypeZAL InvoiceType = "ZAL"
-	InvoiceTypeROZ InvoiceType = "ROZ"
-	InvoiceTypeUPR InvoiceType = "UPR"
+	InvoiceTypeVAT    InvoiceType = "VAT"
+	InvoiceTypeKOR    InvoiceType = "KOR"
+	InvoiceTypeZAL    InvoiceType = "ZAL"
+	InvoiceTypeROZ    InvoiceType = "ROZ"
+	InvoiceTypeUPR    InvoiceType = "UPR"
 	InvoiceTypeKORZAL InvoiceType = "KOR_ZAL"
 	InvoiceTypeKORROZ InvoiceType = "KOR_ROZ"
 )

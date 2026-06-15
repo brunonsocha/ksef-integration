@@ -15,8 +15,8 @@ import (
 )
 
 type KeysResponse struct {
-	Certificate string `json:"certificate"`
-	Usage []string `json:"usage"`
+	Certificate string   `json:"certificate"`
+	Usage       []string `json:"usage"`
 }
 
 func (c *Client) getBothKeys() error {
@@ -66,7 +66,7 @@ func (c *Client) encryptWithPKey(aesKey []byte, key *rsa.PublicKey) ([]byte, err
 	return encryptedData, nil
 }
 
-//multiple of 16s
+// multiple of 16s
 func padPKCS(data []byte, blockSize int) []byte {
 	paddingLen := blockSize - (len(data) % blockSize)
 	padding := bytes.Repeat([]byte{byte(paddingLen)}, paddingLen)

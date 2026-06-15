@@ -3,32 +3,33 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
 type InvoiceStatus string
 
 const (
-	StatusPending InvoiceStatus = "PENDING"
+	StatusPending    InvoiceStatus = "PENDING"
 	StatusProcessing InvoiceStatus = "PROCESSING"
-	StatusSent InvoiceStatus = "SENT"
-	StatusFailed InvoiceStatus = "FAILED"
-	StatusUnknown InvoiceStatus = "UNKNOWN"
+	StatusSent       InvoiceStatus = "SENT"
+	StatusFailed     InvoiceStatus = "FAILED"
+	StatusUnknown    InvoiceStatus = "UNKNOWN"
 )
 
 type Invoice struct {
-	Id int64 `json:"id"` 
-	ExternalId string `json:"external_id"`
-	RawJson string `json:"-"`
-	RawXml string `json:"-"`
-	Status InvoiceStatus `json:"status"`
-	KsefId *string `json:"ksef_id"` 
-	KsefErr *string `json:"ksef_error"` 
-	UpoXml *string `json:"upo_xml"`
-	AttemptCount int `json:"attempt_count"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	SubmissionReference *string `json:"submission_reference"`
+	Id                  int64         `json:"id"`
+	ExternalId          string        `json:"external_id"`
+	RawJson             string        `json:"-"`
+	RawXml              string        `json:"-"`
+	Status              InvoiceStatus `json:"status"`
+	KsefId              *string       `json:"ksef_id"`
+	KsefErr             *string       `json:"ksef_error"`
+	UpoXml              *string       `json:"upo_xml"`
+	AttemptCount        int           `json:"attempt_count"`
+	CreatedAt           time.Time     `json:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at"`
+	SubmissionReference *string       `json:"submission_reference"`
 }
 
 type InvoiceModel struct {
@@ -164,7 +165,7 @@ func (m *InvoiceModel) UpdatePendingInvoice(id int64) error {
 	return err
 }
 
-func (m *InvoiceModel) UpdateUnknownInvoice(id int64, submissionReference string)error {
+func (m *InvoiceModel) UpdateUnknownInvoice(id int64, submissionReference string) error {
 	stmt := "UPDATE Invoices SET status = ?, updated_at = ?, submission_reference = ?  WHERE id = ?"
 	_, err := m.DB.Exec(stmt, StatusUnknown, time.Now().UTC(), submissionReference, id)
 	return err
@@ -186,21 +187,30 @@ func (m *InvoiceModel) DeleteInvoice(id int64) error {
 	return err
 }
 
-func (m *InvoiceModel) GetAllInvoices(filter string, page, limit int) ([]*Invoice, error) {
-	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at, submission_reference FROM Invoices " 
+func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]*Invoice, error) {
+	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at, submission_reference FROM Invoices "
 	var args []any
+	var conditions []string
 	status := InvoiceStatus(filter)
-	if filter != ""  && filter != "all" {
-		stmt += "WHERE status = ? "
+	if filter != "" && filter != "all" {
 		switch status {
 		case StatusFailed, StatusPending, StatusProcessing, StatusSent, StatusUnknown:
+			conditions = append(conditions, "status = ?")
 			args = append(args, status)
 		default:
 			return nil, fmt.Errorf("Niepoprawny filtr: %s.", filter)
 		}
-	} 
-	pageOffset := (page-1) * limit
-	args = append(args, limit, pageOffset)	
+	}
+	if query != "" {
+		conditions = append(conditions, "external_id LIKE ?")
+		args = append(args, "%"+query+"%")
+	}
+	if len(conditions) > 0 {
+		stmt += "WHERE " + strings.Join(conditions, " AND ") + " "
+	}
+	pageOffset := (page - 1) * limit
+	limit++
+	args = append(args, limit, pageOffset)
 	stmt += "ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	rows, err := m.DB.Query(stmt, args...)
 	if err != nil {

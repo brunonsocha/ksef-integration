@@ -133,34 +133,34 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			KodFormularza: KodFormularza{
 				KodSystemowy: "FA (3)",
 				WersjaSchemy: "1-0E",
-				Value: "FA",
+				Value:        "FA",
 			},
 			WariantFormularza: "3",
 			DataWytworzeniaFa: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		},
 		Podmiot1: Podmiot1{
 			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
-				NIP: inv.Seller.Nip,
+				NIP:   inv.Seller.Nip,
 				Nazwa: *inv.Seller.Name,
 			},
 			Adres: Adres{
 				KodKraju: *inv.Seller.CountryCode,
-				AdresL1: *inv.Seller.AddressLine1,
-				},
+				AdresL1:  *inv.Seller.AddressLine1,
 			},
+		},
 		Fa: Fa{
-			KodWaluty: *inv.Currency,
-			P_1: inv.IssueDate,
-			P_2: inv.InvoiceNumber,
-			P_6: inv.IssueDate,
-			P_15: fmt.Sprintf("%.2f", inv.TotalAmount),
+			KodWaluty:     *inv.Currency,
+			P_1:           inv.IssueDate,
+			P_2:           inv.InvoiceNumber,
+			P_6:           inv.IssueDate,
+			P_15:          fmt.Sprintf("%.2f", inv.TotalAmount),
 			RodzajFaktury: string(inv.InvoiceType),
 			Adnotacje: Adnotacje{ // 2 is "nie dotyczy"
-				P_16: 2,
-				P_17: 2,
-				P_18: 2,
+				P_16:  2,
+				P_17:  2,
+				P_18:  2,
 				P_18A: 2,
-				P_23: 2,
+				P_23:  2,
 				Zwolnienie: ZwolnienieN{
 					P_19N: 1,
 				},
@@ -180,15 +180,15 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 	if (inv.InvoiceType == InvoiceTypeKOR || inv.InvoiceType == InvoiceTypeKORZAL || inv.InvoiceType == InvoiceTypeKORROZ) && inv.CorrectedBuyer != nil {
 		fa.Podmiot2 = &Podmiot2{
 			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
-				NIP: inv.CorrectedBuyer.Nip,
+				NIP:   inv.CorrectedBuyer.Nip,
 				Nazwa: *inv.CorrectedBuyer.Name,
 			},
 			Adres: &Adres{
 				KodKraju: *inv.CorrectedBuyer.CountryCode,
-				AdresL1: *inv.CorrectedBuyer.AddressLine1,
+				AdresL1:  *inv.CorrectedBuyer.AddressLine1,
 			},
 			JST: 2,
-			GV: 2,
+			GV:  2,
 		}
 		if inv.CorrectedBuyer.AddressLine2 != nil {
 			fa.Podmiot2.Adres.AdresL2 = *inv.CorrectedBuyer.AddressLine2
@@ -197,15 +197,15 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 		if inv.Buyer.Name != nil && inv.Buyer.AddressLine1 != nil {
 			fa.Podmiot2 = &Podmiot2{
 				DaneIdentyfikacyjne: DaneIdentyfikacyjne{
-					NIP: inv.Buyer.Nip,
+					NIP:   inv.Buyer.Nip,
 					Nazwa: *inv.Buyer.Name,
 				},
 				Adres: &Adres{
 					KodKraju: *inv.Buyer.CountryCode,
-					AdresL1: *inv.Buyer.AddressLine1,
+					AdresL1:  *inv.Buyer.AddressLine1,
 				},
 				JST: 2,
-				GV: 2,
+				GV:  2,
 			}
 			if inv.Buyer.AddressLine2 != nil {
 				fa.Podmiot2.Adres.AdresL2 = *inv.Buyer.AddressLine2
@@ -216,10 +216,10 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 	for _, item := range inv.Items {
 		w := FaWiersz{
 			NrWierszaFa: fmt.Sprintf("%d", item.LineNumber),
-			UU_ID: fmt.Sprintf("item-%d", item.LineNumber),
-			P_7: item.Name,
-			P_11: fmt.Sprintf("%.2f", item.NetAmount),
-			P_12: string(item.TaxRate),
+			UU_ID:       fmt.Sprintf("item-%d", item.LineNumber),
+			P_7:         item.Name,
+			P_11:        fmt.Sprintf("%.2f", item.NetAmount),
+			P_12:        string(item.TaxRate),
 		}
 		if item.Quantity != nil {
 			q := fmt.Sprintf("%.2f", *item.Quantity)
@@ -240,7 +240,7 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 		fa.Fa.DaneFaKorygowanej = &DaneFaKorygowanej{
 			DataWystFaKorygowanej: *inv.OriginalIssueDate,
 			NrFaKorygowanej:       *inv.OriginalInvoiceNumber,
-			NrKSeF: 1,
+			NrKSeF:                1,
 			NrKSeFFaKorygowanej:   *inv.OriginalKsefId,
 		}
 	}
@@ -304,7 +304,7 @@ func validateNIP(nip string) bool {
 		if err != nil {
 			return false
 		}
-		sum += val*weights[i]
-	} 
-	return sum % 11 != 10 && strconv.Itoa(sum % 11) == string(nip[len(nip)-1])
+		sum += val * weights[i]
+	}
+	return sum%11 != 10 && strconv.Itoa(sum%11) == string(nip[len(nip)-1])
 }

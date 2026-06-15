@@ -10,6 +10,7 @@ import (
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -17,12 +18,14 @@ import (
 )
 
 type dashboardData struct {
-	Invoices []*models.Invoice
+	Invoices      []*models.Invoice
 	CurrentFilter string
-	Page int
-	PrevPage int
-	NextPage int
-	More bool
+	Page          int
+	PrevPage      int
+	NextPage      int
+	More          bool
+	Query         string
+	EscapedQuery  string
 }
 
 func (app *application) routes() http.Handler {
@@ -45,44 +48,46 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	// will save json for debugging
 	bodyJson, err := io.ReadAll(r.Body)
 	if err != nil {
-		app.errorLog.Printf("Nie można było odczytać otrzymanego requesta: %v", err)
+		app.errorLog.Printf("event=invoice_request_read_failed error=%q", err.Error())
 		http.Error(w, "Niepoprawny request", http.StatusInternalServerError)
 		return
 	}
 	// wouldnt work with decoder
 	if err := json.Unmarshal(bodyJson, &inv); err != nil {
-		app.errorLog.Printf("Zły format JSON: %v", err)
+		app.errorLog.Printf("event=invoice_json_invalid error=%q", err.Error())
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
 	}
+	app.infoLog.Printf("event=invoice_received external_id=%q", inv.InvoiceNumber)
 	if err := inv.ValidateInvoiceReceived(); err != nil {
-		app.errorLog.Printf("Niepoprawne dane w otrzymanej fakturze: %v", err)
+		app.errorLog.Printf("event=invoice_validation_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
 		http.Error(w, "Niepoprawne dane w otrzymanej fakturze", http.StatusUnprocessableEntity)
 		return
 	}
 	xmlcontent, err := ksef.TransformToXML(&inv)
 	if err != nil {
-		app.errorLog.Printf("Wystąpił błąd przy transformacji w XML: %v", err)
+		app.errorLog.Printf("event=invoice_xml_transform_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
 		http.Error(w, "Błąd przy XML", http.StatusInternalServerError)
 		return
 	}
 	if err := app.xsdValidator.ValidateMem(xmlcontent, xsdvalidate.ValidErrDefault); err != nil {
-		app.errorLog.Printf("Wystąpił błąd przy walidacji struktury otrzymanej faktury w postaci XML - %v.", err)
+		app.errorLog.Printf("event=invoice_xsd_validation_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
 		http.Error(w, "Błąd przy walidacji wytworzonego XML.", http.StatusUnprocessableEntity)
 		return
 	}
-	
+
 	dbInv := &models.Invoice{
 		ExternalId: inv.InvoiceNumber,
-		RawJson: string(bodyJson),
-		RawXml: string(xmlcontent),
+		RawJson:    string(bodyJson),
+		RawXml:     string(xmlcontent),
 	}
 	id, err := app.invoices.InsertInvoice(dbInv)
 	if err != nil {
-		app.errorLog.Printf("Błąd bazy danych: %v", err)
+		app.errorLog.Printf("event=invoice_insert_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
 		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusInternalServerError)
 		return
 	}
+	app.infoLog.Printf("event=invoice_inserted invoice_id=%d external_id=%q status=%q", id, inv.InvoiceNumber, dbInv.Status)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": dbInv.Status})
 }
@@ -92,13 +97,14 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/ui/invoices", http.StatusSeeOther)	
+	http.Redirect(w, r, "/ui/invoices", http.StatusSeeOther)
 }
 
 func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
 	pageRaw := r.URL.Query().Get("page")
-	data, err := app.dashboardHelper(filter, pageRaw, app.config.DashPageSize) 
+	query := r.URL.Query().Get("query")
+	data, err := app.dashboardHelper(filter, pageRaw, query, app.config.DashPageSize)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
@@ -113,12 +119,13 @@ func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("status")
 	pageRaw := r.URL.Query().Get("page")
-	data, err := app.dashboardHelper(filter, pageRaw, app.config.DashPageSize) 
+	query := r.URL.Query().Get("query")
+	data, err := app.dashboardHelper(filter, pageRaw, query, app.config.DashPageSize)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
 	}
-	app.infoLog.Printf("Załadowano strona %d, filtr %s", data.Page, data.CurrentFilter)
+	app.infoLog.Printf("event=dashboard_page_loaded page=%d filter=%q count=%d", data.Page, data.CurrentFilter, len(data.Invoices))
 	app.renderer.render(w, "invoice-table", data)
 }
 
@@ -136,16 +143,16 @@ func (app *application) getInvoice(w http.ResponseWriter, r *http.Request) {
 	app.renderer.render(w, "invoice-container", invoice)
 }
 
-func (app *application) dashboardHelper(filter, pageRaw string, pageSize int) (dashboardData, error) {
+func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize int) (dashboardData, error) {
 	page, err := strconv.Atoi(pageRaw)
 	if err != nil || page < 1 {
 		page = 1
 	}
-	prevPage := page-1
+	prevPage := page - 1
 	if prevPage < 1 {
 		prevPage = 1
 	}
-	invoices, err := app.invoices.GetAllInvoices(filter, page, pageSize+1)
+	invoices, err := app.invoices.GetAllInvoices(filter, query, page, pageSize)
 	if err != nil {
 		return dashboardData{}, err
 	}
@@ -155,12 +162,14 @@ func (app *application) dashboardHelper(filter, pageRaw string, pageSize int) (d
 		invoices = invoices[:pageSize]
 	}
 	data := dashboardData{
-		Invoices: invoices,
+		Invoices:      invoices,
 		CurrentFilter: filter,
-		Page: page,
-		PrevPage: prevPage,
-		NextPage: page+1,
-		More: more,
+		Page:          page,
+		PrevPage:      prevPage,
+		NextPage:      page + 1,
+		More:          more,
+		Query:         query,
+		EscapedQuery:  url.QueryEscape(query),
 	}
 	return data, nil
 }
@@ -179,8 +188,9 @@ func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		return
 	}
+	app.infoLog.Printf("event=invoice_deleted invoice_id=%d", id)
 	w.Header().Set("HX-Trigger", "refreshInvoices")
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (app *application) getHealthLive(w http.ResponseWriter, r *http.Request) {

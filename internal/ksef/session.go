@@ -1,19 +1,19 @@
 package ksef
 
 import (
-	"encoding/json"
-	"crypto/rand"
-	"time"
-	"fmt"
 	"bytes"
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 )
 
 type InSession struct {
-	InSessionRef string
-	InSessionAESKey []byte
+	InSessionRef                  string
+	InSessionAESKey               []byte
 	InSessionInitializationVector []byte
-	InSessionValidity time.Time
+	InSessionValidity             time.Time
 }
 
 func (c *Client) OpenInSession() (*InSession, error) {
@@ -34,20 +34,20 @@ func (c *Client) OpenInSession() (*InSession, error) {
 	}
 	payload := InteractiveSessionPayload{
 		FormCode: SessionFormCode{
-			SystemCode: "FA (3)",
+			SystemCode:    "FA (3)",
 			SchemaVersion: "1-0E",
-			Value: "FA",
+			Value:         "FA",
 		},
 		Encryption: Encryption{
 			EncryptedSymmetricKey: encryptedKey,
-			InitializationVector: iv,
+			InitializationVector:  iv,
 		},
 	}
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(&payload); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", c.ApiURL + "/sessions/online", &buf)
+	req, err := http.NewRequest("POST", c.ApiURL+"/sessions/online", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +66,10 @@ func (c *Client) OpenInSession() (*InSession, error) {
 		return nil, err
 	}
 	inSession := &InSession{
-		InSessionRef: inRes.ReferenceNumber,
-		InSessionAESKey: aesKey,
+		InSessionRef:                  inRes.ReferenceNumber,
+		InSessionAESKey:               aesKey,
 		InSessionInitializationVector: iv,
-		InSessionValidity: inRes.ValidUntil,
+		InSessionValidity:             inRes.ValidUntil,
 	}
 	return inSession, nil
 }
@@ -93,7 +93,7 @@ func (c *Client) CloseInSession(inSession *InSession) error {
 		var errRes struct {
 			Exception struct {
 				ExceptionDetailList []struct {
-					ExceptionCode int `json:"exceptionCode"`
+					ExceptionCode        int    `json:"exceptionCode"`
 					ExceptionDescription string `json:"exceptionDescription"`
 				} `json:"exceptionDetailList"`
 			} `json:"exception"`

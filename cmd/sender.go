@@ -183,7 +183,16 @@ func (app *application) confirmInvoice(inv *models.Invoice, inSessionRef string)
 	if err = app.invoices.UpdateSentInvoice(inv.Id, *statusRes.KsefNumber, upoXmlData, *inv.SubmissionReference); err != nil {
 		app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusSent, err.Error())
 	} else {
+		// i really dont like changing this manually in memory, but it seems better than getting the invoice from the db again.
+		// might think of a better solution.
+		inv.Status = models.StatusSent
+		inv.KsefId = statusRes.KsefNumber
 		app.infoLog.Printf("event=invoice_sent invoice_id=%d external_id=%q ksef_id=%q submission_reference=%q", inv.Id, inv.ExternalId, *statusRes.KsefNumber, *inv.SubmissionReference)
+		if inv.CallbackURL != nil {
+			if err := app.notifyWebhook(inv); err != nil {
+				app.errorLog.Printf("event=webhook_delivery_failed invoice_id=%d error=%q", inv.Id, err.Error())
+			}
+		}
 	}
 }
 
@@ -191,8 +200,16 @@ func (app *application) handleInvoiceFailure(inv *models.Invoice, errorTxt strin
 	if inv.AttemptCount >= app.config.User.Max_retries {
 		if err := app.invoices.UpdateFailedInvoice(inv.Id, errorTxt); err != nil {
 			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusFailed, err.Error())
+		} else {
+			inv.Status = models.StatusFailed
+			inv.KsefErr = &errorTxt
+			app.infoLog.Printf("event=invoice_marked_failed invoice_id=%d external_id=%q attempt_count=%d error=%q", inv.Id, inv.ExternalId, inv.AttemptCount, errorTxt)
+			if inv.CallbackURL != nil {
+				if err := app.notifyWebhook(inv); err != nil {
+					app.errorLog.Printf("event=webhook_delivery_failed invoice_id=%d error=%q", inv.Id, err.Error())
+				}
+			}
 		}
-		app.infoLog.Printf("event=invoice_marked_failed invoice_id=%d external_id=%q attempt_count=%d error=%q", inv.Id, inv.ExternalId, inv.AttemptCount, errorTxt)
 	} else {
 		if err := app.invoices.UpdateRetryInvoice(inv.Id, errorTxt); err != nil {
 			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusPending, err.Error())

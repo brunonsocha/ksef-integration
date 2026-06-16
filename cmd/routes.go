@@ -77,9 +77,10 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbInv := &models.Invoice{
-		ExternalId: inv.InvoiceNumber,
-		RawJson:    string(bodyJson),
-		RawXml:     string(xmlcontent),
+		ExternalId:  inv.InvoiceNumber,
+		RawJson:     string(bodyJson),
+		RawXml:      string(xmlcontent),
+		CallbackURL: inv.CallbackURL,
 	}
 	id, err := app.invoices.InsertInvoice(dbInv)
 	if err != nil {

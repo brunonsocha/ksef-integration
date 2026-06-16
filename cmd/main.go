@@ -24,6 +24,7 @@ type application struct {
 	ksefClient   *ksef.Client
 	renderer     *renderer
 	xsdValidator *xsdvalidate.XsdHandler
+	httpClient   *http.Client
 }
 
 func main() {
@@ -66,6 +67,9 @@ func main() {
 	}
 	defer xsdValidator.Free()
 	infoLog.Printf("event=xsd_validator_ready xsd_path=%q", cfg.XSDPath)
+	client := http.Client{
+		Timeout: time.Duration(cfg.Ksef.HttpTimeoutSec) * time.Second,
+	}
 	app := &application{
 		infoLog:  infoLog,
 		errorLog: errorLog,
@@ -83,6 +87,7 @@ func main() {
 		),
 		renderer:     newRenderer(),
 		xsdValidator: xsdValidator,
+		httpClient:   &client,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

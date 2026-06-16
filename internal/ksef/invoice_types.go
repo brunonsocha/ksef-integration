@@ -18,6 +18,7 @@ type InvoiceReceived struct {
 	TaxBreakdowns         []TaxBreakdown `json:"tax_breakdowns"`
 	Payment               *Payment       `json:"payment"`
 	Flags                 *Flags         `json:"flags"`
+	CallbackURL           *string        `json:"callback_url"`
 }
 
 type Entity struct {

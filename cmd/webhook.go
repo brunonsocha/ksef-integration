@@ -65,3 +65,16 @@ func (app *application) notifyWebhook(inv *models.Invoice) error {
 	}
 	return nil
 }
+
+func (app *application) deliverWebhook(inv *models.Invoice) {
+	if err := app.notifyWebhook(inv); err != nil {
+		if err := app.invoices.UpdateWebhookFailed(inv.Id, err.Error()); err != nil {
+			app.errorLog.Printf("event=webhook_failure_state_update_failed invoice_id=%d error=%q", inv.Id, err.Error())
+		}
+		app.errorLog.Printf("event=webhook_delivery_failed invoice_id=%d error=%q", inv.Id, err.Error())
+		return
+	}
+	if err := app.invoices.UpdateWebhookDelivered(inv.Id); err != nil {
+		app.errorLog.Printf("event=webhook_success_state_update_failed invoice_id=%d error=%q", inv.Id, err.Error())
+	}
+}

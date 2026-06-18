@@ -235,9 +235,9 @@ func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]
 	return invoices, nil
 }
 
-func (m *InvoiceModel) GetInvoicesToWebhook(webhook_attempt_limit int) ([]*Invoice, error) {
-	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at, submission_reference, callback_url, webhook_delivered, webhook_attempt_count, webhook_error FROM Invoices WHERE status IN ('FAILED', 'SENT') AND webhook_delivered = 0 AND callback_url IS NOT NULL AND webhook_attempt_count < ? ORDER BY updated_at ASC"
-	rows, err := m.DB.Query(stmt, webhook_attempt_limit)
+func (m *InvoiceModel) GetInvoicesToWebhook(webhook_attempt_limit, limit int) ([]*Invoice, error) {
+	stmt := "SELECT id, external_id, status, ksef_id, ksef_error, attempt_count, created_at, updated_at, submission_reference, callback_url, webhook_delivered, webhook_attempt_count, webhook_error FROM Invoices WHERE status IN ('FAILED', 'SENT') AND webhook_delivered = 0 AND callback_url IS NOT NULL AND webhook_attempt_count < ? ORDER BY updated_at ASC LIMIT ?"
+	rows, err := m.DB.Query(stmt, webhook_attempt_limit, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -253,12 +253,15 @@ func (m *InvoiceModel) GetInvoicesToWebhook(webhook_attempt_limit int) ([]*Invoi
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if len(invoices) == 0 {
+		return nil, sql.ErrNoRows
+	}
 	return invoices, nil
 }
 
 func (m *InvoiceModel) UpdateWebhookDelivered(id int64) error {
-	stmt := "UPDATE Invoices SET webhook_delivered = ?, updated_at = ? WHERE id = ?"
-	_, err := m.DB.Exec(stmt, true, time.Now().UTC(), id)
+	stmt := "UPDATE Invoices SET webhook_delivered = ?, webhook_error = ?, updated_at = ? WHERE id = ?"
+	_, err := m.DB.Exec(stmt, true, nil, time.Now().UTC(), id)
 	return err
 }
 

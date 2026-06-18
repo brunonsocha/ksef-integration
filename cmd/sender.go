@@ -17,6 +17,7 @@ func (app *application) startSender(ctx context.Context) {
 	defer ticker.Stop()
 	taskLimit := app.config.SenderWorkerLimit
 	taskChan := make(chan struct{}, taskLimit)
+	webhookChan := make(chan struct{}, taskLimit)
 	for {
 		select {
 		case <-ctx.Done():
@@ -26,6 +27,7 @@ func (app *application) startSender(ctx context.Context) {
 			app.infoLog.Printf("event=sender_tick")
 			app.checkUnknownInvoices(taskChan)
 			app.sendInvoice(taskChan)
+			app.sendWebhooks(webhookChan)
 		}
 	}
 }
@@ -72,6 +74,30 @@ func (app *application) sendInvoice(c chan struct{}) {
 		return
 	}
 	app.infoLog.Printf("event=session_closed kind=%q session_ref=%q", "pending", inSession.InSessionRef)
+}
+
+func (app *application) sendWebhooks(c chan struct{}) {
+	invoices, err := app.invoices.GetInvoicesToWebhook(app.config.User.Max_retries, app.config.SenderBatchSize)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			app.errorLog.Printf("event=webhook_invoices_load_failed error=%q", err.Error())
+		}
+		return
+	}
+	var wg sync.WaitGroup
+	for _, inv := range invoices {
+		wg.Add(1)
+		go func(invoiceToWebhook *models.Invoice) {
+			defer wg.Done()
+			c <- struct{}{}
+			defer func() {
+				<-c
+			}()
+			app.deliverWebhook(invoiceToWebhook)
+		}(inv)
+	}
+	wg.Wait()
+	app.infoLog.Printf("event=webhook_batch_processed")
 }
 
 func (app *application) checkUnknownInvoices(c chan struct{}) {
@@ -189,9 +215,7 @@ func (app *application) confirmInvoice(inv *models.Invoice, inSessionRef string)
 		inv.KsefId = statusRes.KsefNumber
 		app.infoLog.Printf("event=invoice_sent invoice_id=%d external_id=%q ksef_id=%q submission_reference=%q", inv.Id, inv.ExternalId, *statusRes.KsefNumber, *inv.SubmissionReference)
 		if inv.CallbackURL != nil {
-			if err := app.notifyWebhook(inv); err != nil {
-				app.errorLog.Printf("event=webhook_delivery_failed invoice_id=%d error=%q", inv.Id, err.Error())
-			}
+			app.deliverWebhook(inv)
 		}
 	}
 }
@@ -205,9 +229,7 @@ func (app *application) handleInvoiceFailure(inv *models.Invoice, errorTxt strin
 			inv.KsefErr = &errorTxt
 			app.infoLog.Printf("event=invoice_marked_failed invoice_id=%d external_id=%q attempt_count=%d error=%q", inv.Id, inv.ExternalId, inv.AttemptCount, errorTxt)
 			if inv.CallbackURL != nil {
-				if err := app.notifyWebhook(inv); err != nil {
-					app.errorLog.Printf("event=webhook_delivery_failed invoice_id=%d error=%q", inv.Id, err.Error())
-				}
+				app.deliverWebhook(inv)
 			}
 		}
 	} else {

@@ -39,7 +39,6 @@ func main() {
 	cfg, err := config.Load(f)
 	if err != nil {
 		errorLog.Fatal(err)
-		// what was the point of the return here
 	}
 	infoLog.Printf("event=config_loaded")
 	if err := cfg.Validate(); err != nil {
@@ -49,7 +48,6 @@ func main() {
 	db, err := database.Connect(cfg.Sqlite.Db_path, cfg.Sqlite.BusyTimeoutMs)
 	if err != nil {
 		errorLog.Fatal(err)
-		// same here
 	}
 	defer db.Close()
 	infoLog.Printf("event=db_connected db_path=%q", cfg.Sqlite.Db_path)

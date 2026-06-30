@@ -230,8 +230,6 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 	for i := 0; i < maxAttempts; i++ {
 		pollingStatus := c.getInvoiceStatus(sessionRef, invoiceRef)
 		switch pollingStatus.outcome {
-		// stupid design. these mean ksef might be still processing, yet if such response was received on the last attempt, the invoice will be marked as FAILED.
-		// new status and polling for UPO?
 		case processingRes:
 			if i == maxAttempts-1 {
 				return nil, UNKNOWN_STATE_ERR

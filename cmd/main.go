@@ -89,7 +89,8 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go app.startSender(ctx)
+	shutdownC := make(chan struct{}, 1)
+	go app.startSender(ctx, shutdownC)
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
 		Handler: app.routes(),
@@ -107,5 +108,6 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		app.errorLog.Fatalf("event=shutdown_failed error=%q", err.Error())
 	}
+	<-shutdownC
 	app.infoLog.Printf("event=shutdown_finished")
 }

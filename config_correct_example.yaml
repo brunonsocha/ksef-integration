@@ -1,0 +1,31 @@
+ksef:
+    nip: "1141414141"
+    url: "https://api-test.ksef.mf.gov.pl/v2"
+    token: ""
+    http_timeout_sec: 100
+    auth_retry_delay_sec: 2
+    polling_delay_sec: 5
+    confirmation_max_attempts: 15
+    form:
+        system_code: "FA (3)"
+        schema_version: "1-0E"
+        value: "FA"
+
+sqlite:
+    db_path: "data/ksef-integration-test.db"
+    busy_timeout_ms: 5000
+
+server:
+    port: "8080"
+
+runonce:
+    xml_path: ""
+
+user:
+    max_retries: 5
+xsd_path: "./xsd/xsd_schema.xsd"
+dash_page_size: 50
+polling_interval: 10
+shutdown_timeout_sec: 30
+sender_batch_size: 50
+sender_worker_limit: 5

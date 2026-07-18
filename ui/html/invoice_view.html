@@ -1,5 +1,5 @@
 {{ define "invoice-container" }}
-	<div class="w-full min-w-0 bg-white rounded-lg shadow overflow-hidden">
+	<div hx-get="/ui/invoice?id={{ .Id }}" hx-trigger="every 10s, retryWebhook from:body" hx-target="this" hx-swap="outerHTML" class="w-full min-w-0 bg-white rounded-lg shadow overflow-hidden">
 	    <div class="bg-gray-50 border-b p-4">
 	        <h2 class="text-lg font-bold">{{ .ExternalId }}</h2>
 	        <p class="text-sm text-gray-500">Szczegóły faktury</p>
@@ -50,6 +50,29 @@
                         {{ if .KsefErr }}{{ .KsefErr }}{{ else }}-{{ end }}
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold uppercase mb-2">Webhook</h3>
+            <div class="grid grid-cols-1 gap-3 text-sm">
+                <div>
+                    <span class="font-semibold">Callback URL:</span>
+                    <span>{{ if .CallbackURL }}{{ .CallbackURL }}{{ else }}-{{ end }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Dostarczony:</span>
+                    <span>{{ if .WebhookDelivered }}TAK{{ else }}NIE{{ end }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Próby webhooka:</span>
+                    <span>{{ .WebhookAttemptCount }}</span>
+                </div>
+                <div>
+                    <span class="font-semibold">Błąd webhooka:</span>
+                    <div class="mt-1 text-red-500">{{ if .WebhookErr }}{{ .WebhookErr }}{{ else }}-{{ end }}</div>
+                </div>
+                {{ if and .CallbackURL (not .WebhookDelivered) .WebhookErr }}<div><button type="button" hx-post="/ui/retrywebhook?id={{ .Id }}" hx-swap="none" class="inline-block bg-sky-700 text-white px-3 py-1 rounded text-sm cursor-pointer">Ponów webhook</button><p class="mt-2 text-xs text-gray-500">Licznik prób webhooka zostanie zresetowany i ponowione zostaną próby wysyłki.</p></div>{{ end }}
             </div>
         </div>
 

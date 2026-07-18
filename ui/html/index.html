@@ -13,7 +13,7 @@
         <button hx-get="/ui/invoices?status=SENT&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-green-300 px-3 py-1 rounded shadow-sm text-sm">Wysłane</button>
         <button hx-get="/ui/invoices?status=FAILED&page=1&query={{ .EscapedQuery }}" hx-target="#main-content" class="bg-red-300 px-3 py-1 rounded shadow-sm text-sm">Niewysłane</button>
     </div>
-    <div id="table-container" hx-get="/ui/invoicetable?status={{ .CurrentFilter }}&page={{ .Page }}&query={{ .EscapedQuery }}" hx-trigger="every 10s, refreshInvoices from:body" hx-target="#table-container">
+    <div id="table-container" hx-get="/ui/invoicetable?status={{ .CurrentFilter }}&page={{ .Page }}&query={{ .EscapedQuery }}" hx-trigger="every 10s, refreshInvoices from:body, retryWebhook from:body" hx-target="#table-container">
         {{ template "invoice-table" . }}
     </div>
 

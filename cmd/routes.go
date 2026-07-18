@@ -28,6 +28,20 @@ type dashboardData struct {
 	EscapedQuery  string
 }
 
+type invoiceStatusRes struct {
+	Id int64 `json:"id"`
+	ExternalId string `json:"external_id"`
+	Status string `json:"status"`
+	KsefId *string `json:"ksef_id"`
+	KsefErr *string `json:"ksef_error"`
+	SubmissionReference *string `json:"submission_reference"`
+	AttemptCount int `json:"attempt_count"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	WebhookDelivered bool `json:"webhook_delivered"`
+	WebhookErr *string `json:"webhook_error"`
+}
+
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /invoices", app.createInvoice)
@@ -35,24 +49,24 @@ func (app *application) routes() http.Handler {
 	mux.Handle("/static/", http.StripPrefix("/static", fs))
 	mux.HandleFunc("GET /{$}", app.home)
 	mux.HandleFunc("GET /ui/invoices", app.getDashboard)
-	mux.HandleFunc("GET /ui/invoice", app.getInvoice)
+	mux.HandleFunc("GET /ui/invoice", app.getDashboardInvoice)
 	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
 	mux.HandleFunc("DELETE /deleteinvoice", app.deleteInvoice)
 	mux.HandleFunc("GET /health/live", app.getHealthLive)
 	mux.HandleFunc("GET /health/ready", app.getHealthReady)
+	mux.HandleFunc("GET /invoice", app.getInvoiceStatus)
+	mux.HandleFunc("POST /ui/retrywebhook", app.postDashboardRetryWebhook)
 	return mux
 }
 
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	var inv ksef.InvoiceReceived
-	// will save json for debugging
 	bodyJson, err := io.ReadAll(r.Body)
 	if err != nil {
 		app.errorLog.Printf("event=invoice_request_read_failed error=%q", err.Error())
 		http.Error(w, "Niepoprawny request", http.StatusInternalServerError)
 		return
 	}
-	// wouldnt work with decoder
 	if err := json.Unmarshal(bodyJson, &inv); err != nil {
 		app.errorLog.Printf("event=invoice_json_invalid error=%q", err.Error())
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
@@ -130,13 +144,13 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 	app.renderer.render(w, "invoice-table", data)
 }
 
-func (app *application) getInvoice(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+func (app *application) getDashboardInvoice(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
 		return
 	}
-	invoice, err := app.invoices.GetInvoice(int64(id))
+	invoice, err := app.invoices.GetInvoice(id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Wystąpił błąd przy pozyskiwaniu faktury: %v", err), http.StatusNotFound)
 		return
@@ -176,17 +190,29 @@ func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize 
 }
 
 func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+	var id int64
+	var err error
+	externalId := r.URL.Query().Get("external_id")
+	if externalId == "" {
+		id, err = strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
 		return
-	}
-	if err := app.invoices.DeleteInvoice(int64(id)); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
-			return
 		}
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		err = app.invoices.DeleteInvoice(id)
+	} else {
+		id, err = app.invoices.DeleteInvoiceExternalId(externalId)
+	}
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if externalId == "" {
+				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+			} else {
+				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o zewnętrznym id %s.", externalId), http.StatusNotFound)
+			}
+		} else {
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		}
 		return
 	}
 	app.infoLog.Printf("event=invoice_deleted invoice_id=%d", id)
@@ -209,5 +235,73 @@ func (app *application) getHealthReady(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Wystąpił problem z połączeniem z bazą danych.", http.StatusServiceUnavailable)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *application) getInvoiceStatus(w http.ResponseWriter, r *http.Request) {
+	var inv *models.Invoice
+	var err error
+	var id int64
+	// idk about this i feel like there's too much nesting here
+	// torn between WET and DRY here, but i think i'd rather have one handler if the
+	// only diff is having the param be a string or int and call a different function
+	// from the models package.
+	externalId := r.URL.Query().Get("external_id")
+	if externalId == "" {
+		id, err = strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+			return
+		}
+		inv, err = app.invoices.GetInvoice(id)
+	} else {
+		inv, err = app.invoices.GetInvoiceExternalId(externalId)
+	}
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if externalId != "" {
+				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o zewnętrznym id %s.", externalId), http.StatusNotFound)
+			} else {
+				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+			}
+		} else {
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+	payload := invoiceStatusRes{
+		Id: inv.Id,
+		ExternalId: inv.ExternalId,
+		Status: string(inv.Status),
+		KsefId: inv.KsefId,
+		KsefErr: inv.KsefErr,
+		SubmissionReference: inv.SubmissionReference,
+		AttemptCount: inv.AttemptCount,
+		CreatedAt: inv.CreatedAt,
+		UpdatedAt: inv.UpdatedAt,
+		WebhookDelivered: inv.WebhookDelivered,
+		WebhookErr: inv.WebhookErr,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		app.errorLog.Printf("event=invoice_status_encode_failed invoice_id=%d error=%v", inv.Id, err)
+	}
+}
+
+func (app *application) postDashboardRetryWebhook(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := app.invoices.ResetWebhookAttemptCount(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+		} else {
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+	w.Header().Set("HX-Trigger", "refreshInvoices")
 	w.WriteHeader(http.StatusOK)
 }

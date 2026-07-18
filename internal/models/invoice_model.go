@@ -33,7 +33,7 @@ type Invoice struct {
 	CallbackURL         *string       `json:"callback_url"`
 	WebhookDelivered    bool          `json:"webhook_delivered"`
 	WebhookAttemptCount int           `json:"webhook_attempt_count"`
-	WebhookError        *string       `json:"webhook_error"`
+	WebhookErr        *string       `json:"webhook_error"`
 }
 
 type InvoiceModel struct {
@@ -59,7 +59,18 @@ func (m *InvoiceModel) InsertInvoice(inv *Invoice) (int64, error) {
 func (m *InvoiceModel) GetInvoice(id int64) (*Invoice, error) {
 	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at, submission_reference, callback_url, webhook_delivered, webhook_attempt_count, webhook_error FROM Invoices WHERE id = ? LIMIT 1"
 	inv := &Invoice{}
-	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookError); err != nil {
+	if err := m.DB.QueryRow(stmt, id).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
+		return nil, err
+	}
+	return inv, nil
+}
+
+func (m *InvoiceModel) GetInvoiceExternalId(externalId string) (*Invoice, error) {
+	// even though this is used only in the getInvoiceStatusExternalId for now
+	// i will make it return a full invoice struct for consistency with standard GetInvoice
+	stmt := "SELECT id, external_id, raw_json, raw_xml, status, ksef_id, ksef_error, upo_xml, attempt_count, created_at, updated_at, submission_reference, callback_url, webhook_delivered, webhook_attempt_count, webhook_error FROM Invoices WHERE external_id = ? LIMIT 1"
+	inv := &Invoice{}
+	if err := m.DB.QueryRow(stmt, externalId).Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
 		return nil, err
 	}
 	return inv, nil
@@ -81,7 +92,7 @@ func (m *InvoiceModel) GetPendingInvoicesConc(limit int) ([]*Invoice, error) {
 	var idsToUpdate []int64
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookError); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -121,7 +132,7 @@ func (m *InvoiceModel) GetUnknownInvoicesConc(limit int) ([]*Invoice, error) {
 	var idsToUpdate []int64
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookError); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.RawJson, &inv.RawXml, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.UpoXml, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -182,13 +193,19 @@ func (m *InvoiceModel) DeleteInvoice(id int64) error {
 		return err
 	}
 	num, err := rows.RowsAffected()
-	if err != nil {
-		return err
-	}
 	if num == 0 {
 		return sql.ErrNoRows
 	}
 	return err
+}
+
+func (m *InvoiceModel) DeleteInvoiceExternalId(externalId string) (int64, error) {
+	var id int64
+	stmt := "DELETE FROM Invoices WHERE external_id = ? AND status = ? RETURNING id"
+	if err := m.DB.QueryRow(stmt, externalId, StatusFailed).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]*Invoice, error) {
@@ -224,7 +241,7 @@ func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]
 	var invoices []*Invoice
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookError); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -245,7 +262,7 @@ func (m *InvoiceModel) GetInvoicesToWebhook(webhook_attempt_limit, limit int) ([
 	var invoices []*Invoice
 	for rows.Next() {
 		inv := &Invoice{}
-		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookError); err != nil {
+		if err := rows.Scan(&inv.Id, &inv.ExternalId, &inv.Status, &inv.KsefId, &inv.KsefErr, &inv.AttemptCount, &inv.CreatedAt, &inv.UpdatedAt, &inv.SubmissionReference, &inv.CallbackURL, &inv.WebhookDelivered, &inv.WebhookAttemptCount, &inv.WebhookErr); err != nil {
 			return nil, err
 		}
 		invoices = append(invoices, inv)
@@ -268,5 +285,15 @@ func (m *InvoiceModel) UpdateWebhookDelivered(id int64) error {
 func (m *InvoiceModel) UpdateWebhookFailed(id int64, errTxt string) error {
 	stmt := "UPDATE Invoices SET webhook_error = ?, webhook_attempt_count = webhook_attempt_count + 1, updated_at = ? WHERE id = ?"
 	_, err := m.DB.Exec(stmt, errTxt, time.Now().UTC(), id)
+	return err
+}
+
+func (m *InvoiceModel) ResetWebhookAttemptCount(id int64) error {
+	stmt := "UPDATE Invoices SET webhook_attempt_count = ?, updated_at = ? WHERE id = ?"
+	rows, err := m.DB.Exec(stmt, 0, time.Now().UTC, id)
+	num, err := rows.RowsAffected()
+	if num == 0 {
+		return sql.ErrNoRows
+	}
 	return err
 }

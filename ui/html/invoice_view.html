@@ -1,5 +1,5 @@
 {{ define "invoice-container" }}
-	<div hx-get="/ui/invoice?id={{ .Id }}" hx-trigger="every 10s, retryWebhook from:body" hx-target="this" hx-swap="outerHTML" class="w-full min-w-0 bg-white rounded-lg shadow overflow-hidden">
+	<div hx-get="/ui/invoice?id={{ .Id }}" hx-trigger="refreshInvoice from:body, retryWebhook from:body" hx-target="this" hx-swap="outerHTML" class="w-full min-w-0 bg-white rounded-lg shadow overflow-hidden">
 	    <div class="bg-gray-50 border-b p-4">
 	        <h2 class="text-lg font-bold">{{ .ExternalId }}</h2>
 	        <p class="text-sm text-gray-500">Szczegóły faktury</p>

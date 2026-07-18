@@ -297,3 +297,12 @@ func (m *InvoiceModel) ResetWebhookAttemptCount(id int64) error {
 	}
 	return err
 }
+
+func (m *InvoiceModel) ReplaceInvoice(externalId string, rawJson, rawXml string, callbackUrl *string) (int64, error) {
+	var id int64
+	stmt := "UPDATE Invoices SET status = ?, ksef_error = ?, attempt_count = ?, updated_at = ?, submission_reference = ?, callback_url = ?, webhook_delivered = ?, webhook_attempt_count = ?, webhook_error = ?, raw_json = ?, raw_xml = ? WHERE external_id = ? AND status = ? RETURNING id"
+	if err := m.DB.QueryRow(stmt, StatusPending, nil, 0, time.Now().UTC(), nil, callbackUrl, false, 0, nil, rawJson, rawXml, externalId, StatusFailed).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}

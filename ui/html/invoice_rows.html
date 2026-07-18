@@ -6,6 +6,7 @@
                         <th class="p-4 text-left text-xs font-semibold uppercase">ID Zewn.</th>
                         <th class="p-4 text-left text-xs font-semibold uppercase">Status</th>
                         <th class="p-4 text-left text-xs font-semibold uppercase">ID KSeF</th>
+                        <th class="p-4 text-center text-xs font-semibold uppercase">Webhook</th>
                         <th class="p-4 text-center text-xs font-semibold uppercase">Próby</th>
                         <th class="p-4 text-center text-xs font-semibold uppercase">Data aktualizacji</th>
                         <th class="p-4 text-center text-xs font-semibold uppercase">Data utworzenia</th>
@@ -53,6 +54,7 @@
                 <div class="text-[10px] text-red-500 italic mt-1">{{ .KsefErr }}</div>
             {{ end }}
         </td>
+        <td class="p-4 text-sm text-center">{{ if .CallbackURL }}{{ if .WebhookDelivered }}SENT{{ else if and .WebhookErr (ge .WebhookAttemptCount $.WebhookMaxRetries) }}ERROR{{ else }}-{{ end }}{{ else }}<span class="text-gray-400 text-xs">-</span>{{ end }}</td>
         <td class="p-4 text-sm text-center">{{ .AttemptCount }}</td>
         <td class="p-4 text-sm text-center text-gray-500">{{ .UpdatedAt.Local.Format "2006-01-02 15:04" }}</td>
         <td class="p-4 text-sm text-center text-gray-500">{{ .CreatedAt.Local.Format "2006-01-02 15:04" }}</td>
@@ -62,7 +64,7 @@
     </tr>
     {{ else }}
     <tr>
-        <td colspan="7" class="p-10 text-center text-gray-400">Brak faktur...</td>
+        <td colspan="8" class="p-10 text-center text-gray-400">Brak faktur...</td>
     </tr>
     {{ end }}
 {{ end }}

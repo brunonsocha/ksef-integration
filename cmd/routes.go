@@ -26,6 +26,7 @@ type dashboardData struct {
 	More          bool
 	Query         string
 	EscapedQuery  string
+	WebhookMaxRetries int
 }
 
 type invoiceStatusRes struct {
@@ -61,6 +62,7 @@ func (app *application) routes() http.Handler {
 
 func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	var inv ksef.InvoiceReceived
+	action := "replaced"
 	bodyJson, err := io.ReadAll(r.Body)
 	if err != nil {
 		app.errorLog.Printf("event=invoice_request_read_failed error=%q", err.Error())
@@ -72,6 +74,7 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Zły format JSON", http.StatusBadRequest)
 		return
 	}
+
 	app.infoLog.Printf("event=invoice_received external_id=%q", inv.InvoiceNumber)
 	if err := inv.ValidateInvoiceReceived(); err != nil {
 		app.errorLog.Printf("event=invoice_validation_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
@@ -89,22 +92,33 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Błąd przy walidacji wytworzonego XML.", http.StatusUnprocessableEntity)
 		return
 	}
-
+	var id int64
 	dbInv := &models.Invoice{
 		ExternalId:  inv.InvoiceNumber,
 		RawJson:     string(bodyJson),
 		RawXml:      string(xmlcontent),
 		CallbackURL: inv.CallbackURL,
 	}
-	id, err := app.invoices.InsertInvoice(dbInv)
+	id, err = app.invoices.ReplaceInvoice(dbInv.ExternalId, dbInv.RawJson, dbInv.RawXml, dbInv.CallbackURL)
 	if err != nil {
-		app.errorLog.Printf("event=invoice_insert_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
-		http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusInternalServerError)
-		return
+		if errors.Is(err, sql.ErrNoRows) {
+			id, err = app.invoices.InsertInvoice(dbInv)
+			action = "created"
+			if err != nil {
+				app.errorLog.Printf("event=invoice_insert_failed external_id=%q error=%q", dbInv.ExternalId, err.Error())
+				http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusInternalServerError)
+				return
+
+			}
+		} else {
+			app.errorLog.Printf("event=invoice_replace_failed external_id=%q error=%q", dbInv.ExternalId, err.Error())
+			http.Error(w, "Nie wprowadzono faktury do bazy danych", http.StatusInternalServerError)
+			return
+		}
 	}
-	app.infoLog.Printf("event=invoice_inserted invoice_id=%d external_id=%q status=%q", id, inv.InvoiceNumber, dbInv.Status)
+	app.infoLog.Printf("event=invoice_%s invoice_id=%d external_id=%q status=%q", action, id, inv.InvoiceNumber, models.StatusPending)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": dbInv.Status})
+	json.NewEncoder(w).Encode(map[string]any{"id": id, "status": models.StatusPending})
 }
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +199,7 @@ func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize 
 		More:          more,
 		Query:         query,
 		EscapedQuery:  url.QueryEscape(query),
+		WebhookMaxRetries: app.config.User.Max_retries,
 	}
 	return data, nil
 }

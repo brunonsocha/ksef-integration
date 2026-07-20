@@ -199,13 +199,17 @@ func (m *InvoiceModel) DeleteInvoice(id int64) error {
 	return err
 }
 
-func (m *InvoiceModel) DeleteInvoiceExternalId(externalId string) (int64, error) {
-	var id int64
-	stmt := "DELETE FROM Invoices WHERE external_id = ? AND status = ? RETURNING id"
-	if err := m.DB.QueryRow(stmt, externalId, StatusFailed).Scan(&id); err != nil {
-		return 0, err
+func (m *InvoiceModel) DeleteInvoiceExternalId(externalId string) error {
+	stmt := "DELETE FROM Invoices WHERE external_id = ? AND status = ?"
+	rows, err := m.DB.Exec(stmt, externalId, StatusFailed)
+	if err != nil {
+		return err
 	}
-	return id, nil
+	num, err := rows.RowsAffected()
+	if num == 0 {
+		return sql.ErrNoRows
+	}
+	return err
 }
 
 func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]*Invoice, error) {

@@ -53,6 +53,7 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("GET /ui/invoice", app.getDashboardInvoice)
 	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
 	mux.HandleFunc("DELETE /deleteinvoice", app.deleteInvoice)
+	mux.HandleFunc("DELETE /ui/deleteinvoice", app.deleteDashboardInvoice)
 	mux.HandleFunc("GET /health/live", app.getHealthLive)
 	mux.HandleFunc("GET /health/ready", app.getHealthReady)
 	mux.HandleFunc("GET /invoice", app.getInvoiceStatus)
@@ -204,27 +205,15 @@ func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize 
 	return data, nil
 }
 
-func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
-	var id int64
-	var err error
-	externalId := r.URL.Query().Get("external_id")
-	if externalId == "" {
-		id, err = strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
-		return
-		}
-		err = app.invoices.DeleteInvoice(id)
-	} else {
-		id, err = app.invoices.DeleteInvoiceExternalId(externalId)
-	}
+func (app *application) deleteDashboardInvoice(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
+		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := app.invoices.DeleteInvoice(id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			if externalId == "" {
-				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
-			} else {
-				http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o zewnętrznym id %s.", externalId), http.StatusNotFound)
-			}
+			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
 		} else {
 			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
 		}
@@ -318,5 +307,22 @@ func (app *application) postDashboardRetryWebhook(w http.ResponseWriter, r *http
 		return
 	}
 	w.Header().Set("HX-Trigger", "refreshInvoices")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
+	externalId := r.URL.Query().Get("external_id")
+	if externalId == "" {
+		http.Error(w, fmt.Sprintf("Niepoprawne id."), http.StatusBadRequest)
+		return
+	}
+	if err := app.invoices.DeleteInvoiceExternalId(externalId); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o zewnętrznym id: %s.", externalId), http.StatusNotFound)
+		} else { 
+			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }

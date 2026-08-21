@@ -57,12 +57,16 @@ type Fa struct {
 	// taxbreakdowns
 	P_13_1            *string            `xml:"P_13_1,omitempty"`
 	P_14_1            *string            `xml:"P_14_1,omitempty"`
+	P_14_1W           *string            `xml:"P_14_1W,omitempty"`
 	P_13_2            *string            `xml:"P_13_2,omitempty"`
 	P_14_2            *string            `xml:"P_14_2,omitempty"`
+	P_14_2W           *string            `xml:"P_14_2W,omitempty"`
 	P_13_3            *string            `xml:"P_13_3,omitempty"`
 	P_14_3            *string            `xml:"P_14_3,omitempty"`
+	P_14_3W           *string            `xml:"P_14_3W,omitempty"`
 	P_13_4            *string            `xml:"P_13_4,omitempty"`
 	P_14_4            *string            `xml:"P_14_4,omitempty"`
+	P_14_4W           *string            `xml:"P_14_4W,omitempty"`
 	P_13_5            *string            `xml:"P_13_5,omitempty"`
 	P_14_5            *string            `xml:"P_14_5,omitempty"`
 	P_13_6_1          *string            `xml:"P_13_6_1,omitempty"`
@@ -70,6 +74,8 @@ type Fa struct {
 	P_13_6_3          *string            `xml:"P_13_6_3,omitempty"`
 	P_13_7            *string            `xml:"P_13_7,omitempty"`
 	P_13_8            *string            `xml:"P_13_8,omitempty"`
+	P_13_9            *string            `xml:"P_13_9,omitempty"`
+	P_13_10           *string            `xml:"P_13_10,omitempty"`
 	P_15              string             `xml:"P_15"` // brutto
 	Adnotacje         Adnotacje          `xml:"Adnotacje"`
 	RodzajFaktury     string             `xml:"RodzajFaktury"`
@@ -77,6 +83,7 @@ type Fa struct {
 	TypKorekty        int                `xml:"TypKorekty,omitempty"`
 	DaneFaKorygowanej *DaneFaKorygowanej `xml:"DaneFaKorygowanej,omitempty"` // omijane jeśli nie KOR
 	FaWiersz          []FaWiersz         `xml:"FaWiersz"`
+	Platnosc          *Platnosc          `xml:"Platnosc,omitempty"`
 }
 
 type Adnotacje struct {
@@ -118,4 +125,20 @@ type FaWiersz struct {
 	P_9A        *string `xml:"P_9A,omitempty"` // cena netto/jednostka
 	P_11        string  `xml:"P_11"`           // wartosc netto
 	P_12        string  `xml:"P_12"`           // podatek
+	KursWaluty  *string `xml:"KursWaluty,omitempty"`
+}
+
+type Platnosc struct {
+	TerminPlatnosci  *TerminPlatnosci  `xml:"TerminPlatnosci,omitempty"`
+	FormaPlatnosci   *string           `xml:"FormaPlatnosci,omitempty"`
+	RachunekBankowy  *RachunekBankowy  `xml:"RachunekBankowy,omitempty"`
+}
+
+type TerminPlatnosci struct {
+	Termin string `xml:"Termin"`
+}
+
+type RachunekBankowy struct {
+	NrRB       string  `xml:"NrRB"`
+	NazwaBanku *string `xml:"NazwaBanku,omitempty"`
 }

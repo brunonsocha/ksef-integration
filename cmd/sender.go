@@ -110,21 +110,6 @@ func (app *application) checkUnknownInvoices(c chan struct{}) {
 		return
 	}
 	app.infoLog.Printf("event=unknown_invoices_loaded count=%d", len(invoices))
-	inSession, err := app.ksefClient.OpenInSession()
-	if err != nil {
-		app.errorLog.Printf("event=session_open_failed kind=%q error=%q", "unknown", err.Error())
-		for _, inv := range invoices {
-			if networkCheck(err) {
-				if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
-					app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusPending, err.Error())
-				}
-			} else {
-				app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
-			}
-		}
-		return
-	}
-	app.infoLog.Printf("event=session_opened kind=%q session_ref=%q count=%d", "unknown", inSession.InSessionRef, len(invoices))
 	var wg sync.WaitGroup
 	for _, inv := range invoices {
 		wg.Add(1)
@@ -134,15 +119,10 @@ func (app *application) checkUnknownInvoices(c chan struct{}) {
 			defer func() {
 				<-c
 			}()
-			app.confirmInvoice(inv, inSession.InSessionRef)
+			app.confirmInvoice(inv)
 		}(inv)
 	}
 	wg.Wait()
-	if err := app.ksefClient.CloseInSession(inSession); err != nil {
-		app.errorLog.Printf("event=session_close_failed kind=%q session_ref=%q error=%q", "unknown", inSession.InSessionRef, err.Error())
-		return
-	}
-	app.infoLog.Printf("event=session_closed kind=%q session_ref=%q", "unknown", inSession.InSessionRef)
 }
 
 func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSession) {
@@ -167,51 +147,70 @@ func (app *application) processInvoice(inv *models.Invoice, inSession *ksef.InSe
 		app.handleInvoiceFailure(inv, err.Error())
 		return
 	}
+	sessionRef := inSession.InSessionRef
+	if err := app.invoices.UpdateUnknownInvoice(inv.Id, sessionRef, ref); err != nil {
+		app.errorLog.Printf("event=invoice_submission_persist_failed invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, err.Error())
+		return
+	}
+	inv.Status = models.StatusUnknown
+	inv.SessionReference = &sessionRef
 	inv.SubmissionReference = &ref
-	app.infoLog.Printf("event=invoice_submission_created invoice_id=%d external_id=%q submission_reference=%q", inv.Id, inv.ExternalId, ref)
-	app.confirmInvoice(inv, inSession.InSessionRef)
+	app.infoLog.Printf("event=invoice_submission_created invoice_id=%d external_id=%q session_reference=%q submission_reference=%q", inv.Id, inv.ExternalId, sessionRef, ref)
+	app.confirmInvoice(inv)
 }
 
-func (app *application) confirmInvoice(inv *models.Invoice, inSessionRef string) {
-	if inv.SubmissionReference == nil {
-		app.errorLog.Printf("event=invoice_confirmation_failed invoice_id=%d external_id=%q reason=%q", inv.Id, inv.ExternalId, "missing_submission_reference")
-		app.handleInvoiceFailure(inv, "BRAK DANYCH O WYSYŁCE")
+func (app *application) confirmInvoice(inv *models.Invoice) {
+	if inv.SessionReference == nil || inv.SubmissionReference == nil {
+		app.errorLog.Printf("event=invoice_confirmation_failed invoice_id=%d external_id=%q reason=%q", inv.Id, inv.ExternalId, "missing_submission_details")
+		if err := app.invoices.UpdateFailedInvoice(inv.Id, "BRAK DANYCH O WYSYŁCE"); err != nil {
+			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusFailed, err.Error())
+		}
 		return
 	}
-	app.infoLog.Printf("event=invoice_confirmation_started invoice_id=%d external_id=%q submission_reference=%q session_ref=%q", inv.Id, inv.ExternalId, *inv.SubmissionReference, inSessionRef)
-	statusRes, err := app.ksefClient.WaitForSendingConfirmation(app.config.Ksef.ConfirmationMaxAttempts, inSessionRef, *inv.SubmissionReference)
+	app.infoLog.Printf("event=invoice_confirmation_started invoice_id=%d external_id=%q submission_reference=%q session_ref=%q", inv.Id, inv.ExternalId, *inv.SubmissionReference, *inv.SessionReference)
+	statusRes, err := app.ksefClient.WaitForSendingConfirmation(app.config.Ksef.ConfirmationMaxAttempts, *inv.SessionReference, *inv.SubmissionReference)
 	if err != nil {
-		if networkCheck(err) {
-			app.infoLog.Printf("event=invoice_confirmation_paused_network invoice_id=%d external_id=%q", inv.Id, inv.ExternalId)
-			if err := app.invoices.UpdatePendingInvoice(inv.Id); err != nil {
-				app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusPending, err.Error())
+		if errors.Is(err, ksef.INVOICE_REJECTED_ERR) {
+			errorTxt := err.Error()
+			app.errorLog.Printf("event=invoice_confirmation_rejected invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, errorTxt)
+
+			if err := app.invoices.UpdateFailedInvoice(inv.Id, errorTxt); err != nil {
+				app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusFailed, err.Error())
+				return
 			}
-			return
-		} else if errors.Is(err, ksef.UNKNOWN_STATE_ERR) {
-			app.infoLog.Printf("event=invoice_marked_unknown invoice_id=%d external_id=%q submission_reference=%q", inv.Id, inv.ExternalId, *inv.SubmissionReference)
-			if err := app.invoices.UpdateUnknownInvoice(inv.Id, *inv.SubmissionReference); err != nil {
-				app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusUnknown, err.Error())
+			inv.Status = models.StatusFailed
+			inv.KsefErr = &errorTxt
+			if inv.CallbackURL != nil {
+				app.deliverWebhook(inv)
 			}
 			return
 		}
-		app.errorLog.Printf("event=invoice_confirmation_failed invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, err.Error())
-		app.handleInvoiceFailure(inv, err.Error())
+		app.infoLog.Printf("event=invoice_confirmation_deferred invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, err.Error())
+		if err := app.invoices.RestoreUnknownInvoice(inv.Id); err != nil {
+			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusUnknown, err.Error())
+		}
 		return
 	}
-	upoXmlData := ""
-	if statusRes.UpoDownloadUrl != nil {
-		upoBytes, err := app.ksefClient.DownloadUPO(*statusRes.UpoDownloadUrl)
-		if err != nil {
-			app.errorLog.Printf("event=upo_download_failed invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, err.Error())
-		} else {
-			upoXmlData = string(upoBytes)
+	if statusRes.UpoDownloadUrl == nil {
+		app.errorLog.Printf("event=upo_download_deferred invoice_id=%d external_id=%q reason=%q", inv.Id, inv.ExternalId, "missing_download_url")
+		if err := app.invoices.RestoreUnknownInvoice(inv.Id); err != nil {
+			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusUnknown, err.Error())
 		}
+		return
 	}
+
+	upoBytes, err := app.ksefClient.DownloadUPO(*statusRes.UpoDownloadUrl)
+	if err != nil {
+		app.errorLog.Printf("event=upo_download_failed invoice_id=%d external_id=%q error=%q", inv.Id, inv.ExternalId, err.Error())
+		if err := app.invoices.RestoreUnknownInvoice(inv.Id); err != nil {
+			app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusUnknown, err.Error())
+		}
+		return
+	}
+	upoXmlData := string(upoBytes)
 	if err = app.invoices.UpdateSentInvoice(inv.Id, *statusRes.KsefNumber, upoXmlData, *inv.SubmissionReference); err != nil {
 		app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusSent, err.Error())
 	} else {
-		// i really dont like changing this manually in memory, but it seems better than getting the invoice from the db again.
-		// might think of a better solution.
 		inv.Status = models.StatusSent
 		inv.KsefId = statusRes.KsefNumber
 		app.infoLog.Printf("event=invoice_sent invoice_id=%d external_id=%q ksef_id=%q submission_reference=%q", inv.Id, inv.ExternalId, *statusRes.KsefNumber, *inv.SubmissionReference)

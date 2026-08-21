@@ -3,6 +3,7 @@ package ksef
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -232,7 +233,7 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 		switch pollingStatus.outcome {
 		case processingRes:
 			if i == maxAttempts-1 {
-				return nil, UNKNOWN_STATE_ERR
+				return nil, errors.New("KSeF nie potwierdził statusu faktury.") 
 			}
 			time.Sleep(c.PollingDelay)
 		case successRes:
@@ -253,14 +254,14 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 			lastErr = pollingStatus.err
 			return nil, fmt.Errorf("Wystąpił błąd: %v - %d", pollingStatus.err, pollingStatus.httpStatus)
 		case rejected:
-			return nil, fmt.Errorf("KSeF odrzucił fakturę: %v", fmt.Errorf("%d - %s - %s - %s", pollingStatus.statusRes.Status.Code, pollingStatus.statusRes.Status.Description, pollingStatus.statusRes.Status.Extensions, pollingStatus.statusRes.Status.Details))
+			return nil, fmt.Errorf("%w: %d - %s - %s - %s", INVOICE_REJECTED_ERR, pollingStatus.statusRes.Status.Code, pollingStatus.statusRes.Status.Description, pollingStatus.statusRes.Status.Extensions, pollingStatus.statusRes.Status.Details)
 		}
 	}
 	return nil, fmt.Errorf("Doszło do timeoutu po %d próbach, ostatni znany błąd to %v.", maxAttempts, lastErr)
 }
 
 func (c *Client) DownloadUPO(upoUrl string) ([]byte, error) {
-	res, err := http.Get(upoUrl)
+	res, err := c.httpClient.Get(upoUrl)
 	if err != nil {
 		return nil, err
 	}

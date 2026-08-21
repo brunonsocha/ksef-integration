@@ -87,6 +87,10 @@ func main() {
 		xsdValidator: xsdValidator,
 		httpClient:   &client,
 	}
+	if err := app.invoices.RecoverProcessingInvoices(); err != nil {
+		app.errorLog.Fatalf("event=invoice_recovery_failed error=%q", err.Error())
+	}
+	app.infoLog.Printf("event=invoice_recovery_finished")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	shutdownC := make(chan struct{}, 1)

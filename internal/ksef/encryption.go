@@ -21,7 +21,7 @@ type KeysResponse struct {
 
 func (c *Client) getBothKeys() error {
 	fullUrl := fmt.Sprintf("%s/security/public-key-certificates", c.ApiURL)
-	res, err := http.Get(fullUrl)
+	res, err := c.httpClient.Get(fullUrl)
 	if err != nil {
 		return err
 	}

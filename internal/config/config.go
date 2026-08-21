@@ -92,13 +92,13 @@ func (c *Config) Validate() error {
 		errors = append(errors, "Niepoprawna ścieżka do schematu XSD.")
 	}
 	if c.User.Max_retries < 0 {
-		errors = append(errors, "Maksymalna ilość prób musi być minimum 0.")
+		errors = append(errors, "Maksymalna ilość prób ponownych musi być minimum 0.")
 	}
 	if c.DashPageSize <= 0 {
 		errors = append(errors, "Strony w panelu nie mogą mieścić zera faktur.")
 	}
 	if c.PollingInterval <= 0 {
-		errors = append(errors, "Próby nie mogą być podejmowane co mniej niż 1 sekundę.")
+		errors = append(errors, "Próby ponowne nie mogą być podejmowane co mniej niż 1 sekundę.")
 	}
 	if c.ShutdownTimeoutSec <= 0 {
 		errors = append(errors, "Zamknięcie nie może występować w mniej niż 1 sekundę.")

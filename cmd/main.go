@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -25,6 +26,9 @@ type application struct {
 	renderer     *renderer
 	xsdValidator *xsdvalidate.XsdHandler
 	httpClient   *http.Client
+	appApiKey    string
+	dashboardUsername string
+	dashboardPassword string
 }
 
 func main() {
@@ -45,6 +49,24 @@ func main() {
 		errorLog.Fatalf("event=config_validation_failed error=%q", err.Error())
 	}
 	infoLog.Printf("event=config_validated")
+	ksefToken := strings.TrimSpace(os.Getenv("KSEF_TOKEN"))
+	if ksefToken == "" {
+		errorLog.Fatal("event=environment_validation_failed variable=\"KSEF_TOKEN\" reason=\"missing\"")
+	}
+	appApiKey := strings.TrimSpace(os.Getenv("APP_API_KEY"))
+	if appApiKey == "" {
+		errorLog.Fatal("event=environment_validation_failed variable=\"APP_API_KEY\" reason=\"missing\"")
+	}
+	dashboardUsername := strings.TrimSpace(os.Getenv("DASHBOARD_USERNAME"))
+	if dashboardUsername == "" {
+		errorLog.Fatal("event=environment_validation_failed variable=\"DASHBOARD_USERNAME\" reason=\"missing\"")
+	}
+
+	dashboardPassword := strings.TrimSpace(os.Getenv("DASHBOARD_PASSWORD"))
+	if dashboardPassword == "" {
+		errorLog.Fatal("event=environment_validation_failed variable=\"DASHBOARD_PASSWORD\" reason=\"missing\"")
+	}
+	infoLog.Printf("event=environment_validated")
 	db, err := database.Connect(cfg.Sqlite.Db_path, cfg.Sqlite.BusyTimeoutMs)
 	if err != nil {
 		errorLog.Fatal(err)
@@ -77,7 +99,7 @@ func main() {
 		config: cfg,
 		ksefClient: ksef.NewClient(
 			cfg.Ksef.Nip,
-			cfg.Ksef.Token,
+			ksefToken,
 			cfg.Ksef.Url,
 			cfg.Ksef.HttpTimeoutSec,
 			cfg.Ksef.AuthRetryDelaySec,
@@ -86,6 +108,9 @@ func main() {
 		renderer:     newRenderer(),
 		xsdValidator: xsdValidator,
 		httpClient:   &client,
+		appApiKey: appApiKey,
+		dashboardUsername: dashboardUsername,
+		dashboardPassword: dashboardPassword,
 	}
 	if err := app.invoices.RecoverProcessingInvoices(); err != nil {
 		app.errorLog.Fatalf("event=invoice_recovery_failed error=%q", err.Error())

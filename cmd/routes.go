@@ -57,19 +57,19 @@ type errorRes struct {
 
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /invoices", app.createInvoice)
+	mux.HandleFunc("POST /invoices", app.requireAPIKey(app.createInvoice))
 	fs := http.FileServer(http.Dir("./ui/static/"))
 	mux.Handle("/static/", http.StripPrefix("/static", fs))
 	mux.HandleFunc("GET /{$}", app.home)
-	mux.HandleFunc("GET /ui/invoices", app.getDashboard)
-	mux.HandleFunc("GET /ui/invoice", app.getDashboardInvoice)
-	mux.HandleFunc("GET /ui/invoicetable", app.getDashboardInvoices)
-	mux.HandleFunc("DELETE /deleteinvoice", app.deleteInvoice)
-	mux.HandleFunc("DELETE /ui/deleteinvoice", app.deleteDashboardInvoice)
+	mux.HandleFunc("GET /ui/invoices", app.requireDashboardAuth(app.getDashboard))
+	mux.HandleFunc("GET /ui/invoice", app.requireDashboardAuth(app.getDashboardInvoice))
+	mux.HandleFunc("GET /ui/invoicetable", app.requireDashboardAuth(app.getDashboardInvoices))
+	mux.HandleFunc("DELETE /deleteinvoice", app.requireAPIKey(app.deleteInvoice))
+	mux.HandleFunc("DELETE /ui/deleteinvoice", app.requireDashboardAuth(app.deleteDashboardInvoice))
 	mux.HandleFunc("GET /health/live", app.getHealthLive)
 	mux.HandleFunc("GET /health/ready", app.getHealthReady)
-	mux.HandleFunc("GET /invoice", app.getInvoiceStatus)
-	mux.HandleFunc("POST /ui/retrywebhook", app.postDashboardRetryWebhook)
+	mux.HandleFunc("GET /invoice", app.requireAPIKey(app.getInvoiceStatus))
+	mux.HandleFunc("POST /ui/retrywebhook", app.requireDashboardAuth(app.postDashboardRetryWebhook))
 	return mux
 }
 

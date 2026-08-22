@@ -12,7 +12,6 @@ type Config struct {
 	Ksef struct {
 		Nip                     string `yaml:"nip"`
 		Url                     string `yaml:"url"`
-		Token                   string `yaml:"token"`
 		HttpTimeoutSec          int    `yaml:"http_timeout_sec"`
 		AuthRetryDelaySec       int    `yaml:"auth_retry_delay_sec"`
 		PollingDelaySec         int    `yaml:"polling_delay_sec"`
@@ -61,9 +60,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Ksef.Url == "" {
 		errors = append(errors, "Brakuje adresu URL KSeF.")
-	}
-	if c.Ksef.Token == "" {
-		errors = append(errors, "Brakuje tokena KSeF - pozyskaj go z panelu KSeF.")
 	}
 	if c.Ksef.HttpTimeoutSec <= 0 {
 		errors = append(errors, "Timeout klienta HTTP KSeF musi być większy niż 0 sekund.")

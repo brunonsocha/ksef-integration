@@ -18,15 +18,15 @@ import (
 )
 
 type application struct {
-	infoLog      *log.Logger
-	errorLog     *log.Logger
-	invoices     *models.InvoiceModel
-	config       *config.Config
-	ksefClient   *ksef.Client
-	renderer     *renderer
-	xsdValidator *xsdvalidate.XsdHandler
-	httpClient   *http.Client
-	appApiKey    string
+	infoLog           *log.Logger
+	errorLog          *log.Logger
+	invoices          *models.InvoiceModel
+	config            *config.Config
+	ksefClient        *ksef.Client
+	renderer          *renderer
+	xsdValidator      *xsdvalidate.XsdHandler
+	httpClient        *http.Client
+	appApiKey         string
 	dashboardUsername string
 	dashboardPassword string
 }
@@ -105,10 +105,10 @@ func main() {
 			cfg.Ksef.AuthRetryDelaySec,
 			cfg.Ksef.PollingDelaySec,
 		),
-		renderer:     newRenderer(),
-		xsdValidator: xsdValidator,
-		httpClient:   &client,
-		appApiKey: appApiKey,
+		renderer:          newRenderer(),
+		xsdValidator:      xsdValidator,
+		httpClient:        &client,
+		appApiKey:         appApiKey,
 		dashboardUsername: dashboardUsername,
 		dashboardPassword: dashboardPassword,
 	}

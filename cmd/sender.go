@@ -12,7 +12,7 @@ import (
 )
 
 func (app *application) startSender(ctx context.Context, shutdownC chan struct{}) {
-	defer func(){shutdownC<-struct{}{}}()
+	defer func() { shutdownC <- struct{}{} }()
 	app.infoLog.Printf("event=sender_started interval_sec=%d worker_limit=%d batch_size=%d", app.config.PollingInterval, app.config.SenderWorkerLimit, app.config.SenderBatchSize)
 	ticker := time.NewTicker(time.Duration(app.config.PollingInterval) * time.Second)
 	defer ticker.Stop()
@@ -70,11 +70,12 @@ func (app *application) sendInvoice(c chan struct{}) {
 		}(inv)
 	}
 	wg.Wait()
+	sessionRef := inSession.InSessionRef
 	if err := app.ksefClient.CloseInSession(inSession); err != nil {
-		app.errorLog.Printf("event=session_close_failed kind=%q session_ref=%q error=%q", "pending", inSession.InSessionRef, err.Error())
+		app.errorLog.Printf("event=session_close_failed kind=%q session_ref=%q error=%q", "pending", sessionRef, err.Error())
 		return
 	}
-	app.infoLog.Printf("event=session_closed kind=%q session_ref=%q", "pending", inSession.InSessionRef)
+	app.infoLog.Printf("event=session_closed kind=%q session_ref=%q", "pending", sessionRef)
 }
 
 func (app *application) sendWebhooks(c chan struct{}) {

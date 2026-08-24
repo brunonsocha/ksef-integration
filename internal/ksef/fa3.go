@@ -129,9 +129,9 @@ type FaWiersz struct {
 }
 
 type Platnosc struct {
-	TerminPlatnosci  *TerminPlatnosci  `xml:"TerminPlatnosci,omitempty"`
-	FormaPlatnosci   *string           `xml:"FormaPlatnosci,omitempty"`
-	RachunekBankowy  *RachunekBankowy  `xml:"RachunekBankowy,omitempty"`
+	TerminPlatnosci *TerminPlatnosci `xml:"TerminPlatnosci,omitempty"`
+	FormaPlatnosci  *string          `xml:"FormaPlatnosci,omitempty"`
+	RachunekBankowy *RachunekBankowy `xml:"RachunekBankowy,omitempty"`
 }
 
 type TerminPlatnosci struct {

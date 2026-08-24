@@ -18,40 +18,40 @@ import (
 )
 
 type dashboardData struct {
-	Invoices      []*models.Invoice
-	CurrentFilter string
-	Page          int
-	PrevPage      int
-	NextPage      int
-	More          bool
-	Query         string
-	EscapedQuery  string
+	Invoices          []*models.Invoice
+	CurrentFilter     string
+	Page              int
+	PrevPage          int
+	NextPage          int
+	More              bool
+	Query             string
+	EscapedQuery      string
 	WebhookMaxRetries int
 }
 
 type invoiceStatusRes struct {
-	Id int64 `json:"id"`
-	ExternalId string `json:"external_id"`
-	Status string `json:"status"`
-	KsefId *string `json:"ksef_id"`
-	KsefErr *string `json:"ksef_error"`
-	SubmissionReference *string `json:"submission_reference"`
-	AttemptCount int `json:"attempt_count"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	WebhookDelivered bool `json:"webhook_delivered"`
-	WebhookErr *string `json:"webhook_error"`
+	Id                  int64     `json:"id"`
+	ExternalId          string    `json:"external_id"`
+	Status              string    `json:"status"`
+	KsefId              *string   `json:"ksef_id"`
+	KsefErr             *string   `json:"ksef_error"`
+	SubmissionReference *string   `json:"submission_reference"`
+	AttemptCount        int       `json:"attempt_count"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	WebhookDelivered    bool      `json:"webhook_delivered"`
+	WebhookErr          *string   `json:"webhook_error"`
 }
 
 type successRes struct {
-	Status string `json:"status"`
+	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
-	Data any `json:"data,omitempty"`
+	Data    any    `json:"data,omitempty"`
 }
 
 type errorRes struct {
-	Status string `json:"status"`
-	Code string `json:"code"`
+	Status  string `json:"status"`
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -131,9 +131,9 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	app.infoLog.Printf("event=invoice_%s invoice_id=%d external_id=%q status=%q", action, id, inv.InvoiceNumber, models.StatusPending)
 	app.writeRes(w, http.StatusCreated, successRes{
-		Status: "ok",
+		Status:  "ok",
 		Message: fmt.Sprintf("The invoice has been %s.", action),
-		Data: map[string]any{"id": id, "status": models.StatusPending},
+		Data:    map[string]any{"id": id, "status": models.StatusPending},
 	})
 }
 
@@ -207,14 +207,14 @@ func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize 
 		invoices = invoices[:pageSize]
 	}
 	data := dashboardData{
-		Invoices:      invoices,
-		CurrentFilter: filter,
-		Page:          page,
-		PrevPage:      prevPage,
-		NextPage:      page + 1,
-		More:          more,
-		Query:         query,
-		EscapedQuery:  url.QueryEscape(query),
+		Invoices:          invoices,
+		CurrentFilter:     filter,
+		Page:              page,
+		PrevPage:          prevPage,
+		NextPage:          page + 1,
+		More:              more,
+		Query:             query,
+		EscapedQuery:      url.QueryEscape(query),
 		WebhookMaxRetries: app.config.User.Max_retries,
 	}
 	return data, nil
@@ -289,22 +289,22 @@ func (app *application) getInvoiceStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	payload := invoiceStatusRes{
-		Id: inv.Id,
-		ExternalId: inv.ExternalId,
-		Status: string(inv.Status),
-		KsefId: inv.KsefId,
-		KsefErr: inv.KsefErr,
+		Id:                  inv.Id,
+		ExternalId:          inv.ExternalId,
+		Status:              string(inv.Status),
+		KsefId:              inv.KsefId,
+		KsefErr:             inv.KsefErr,
 		SubmissionReference: inv.SubmissionReference,
-		AttemptCount: inv.AttemptCount,
-		CreatedAt: inv.CreatedAt,
-		UpdatedAt: inv.UpdatedAt,
-		WebhookDelivered: inv.WebhookDelivered,
-		WebhookErr: inv.WebhookErr,
+		AttemptCount:        inv.AttemptCount,
+		CreatedAt:           inv.CreatedAt,
+		UpdatedAt:           inv.UpdatedAt,
+		WebhookDelivered:    inv.WebhookDelivered,
+		WebhookErr:          inv.WebhookErr,
 	}
 	app.writeRes(w, http.StatusOK, successRes{
-		Status: "ok",
+		Status:  "ok",
 		Message: "Invoice status received.",
-		Data: payload,
+		Data:    payload,
 	})
 }
 
@@ -335,14 +335,14 @@ func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 	if err := app.invoices.DeleteInvoiceExternalId(externalId); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("The invoice with external ID %s cannot be found.", externalId))
-		} else { 
+		} else {
 			app.writeErrorRes(w, http.StatusInternalServerError, "deletion_failure", "The invoice could not be deleted.")
 		}
 		return
 	}
 	app.writeRes(w, http.StatusOK, successRes{
-		Status: "ok",
+		Status:  "ok",
 		Message: "The invoice has been deleted.",
-		Data: "",
+		Data:    "",
 	})
 }

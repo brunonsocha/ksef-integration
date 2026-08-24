@@ -233,7 +233,7 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 		switch pollingStatus.outcome {
 		case processingRes:
 			if i == maxAttempts-1 {
-				return nil, errors.New("KSeF nie potwierdził statusu faktury.") 
+				return nil, errors.New("KSeF nie potwierdził statusu faktury.")
 			}
 			time.Sleep(c.PollingDelay)
 		case successRes:

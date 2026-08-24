@@ -29,12 +29,12 @@ type Invoice struct {
 	AttemptCount        int           `json:"attempt_count"`
 	CreatedAt           time.Time     `json:"created_at"`
 	UpdatedAt           time.Time     `json:"updated_at"`
-	SessionReference    *string 	  `json:"session_reference"`
+	SessionReference    *string       `json:"session_reference"`
 	SubmissionReference *string       `json:"submission_reference"`
 	CallbackURL         *string       `json:"callback_url"`
 	WebhookDelivered    bool          `json:"webhook_delivered"`
 	WebhookAttemptCount int           `json:"webhook_attempt_count"`
-	WebhookErr        *string       `json:"webhook_error"`
+	WebhookErr          *string       `json:"webhook_error"`
 }
 
 type InvoiceModel struct {

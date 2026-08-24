@@ -15,8 +15,8 @@ func (app *application) writeRes(w http.ResponseWriter, status int, payload any)
 
 func (app *application) writeErrorRes(w http.ResponseWriter, status int, code, message string) {
 	app.writeRes(w, status, errorRes{
-		Status: "error",
-		Code: code,
+		Status:  "error",
+		Code:    code,
 		Message: message,
 	})
 }

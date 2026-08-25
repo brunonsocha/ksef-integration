@@ -236,7 +236,7 @@ func (m *InvoiceModel) GetAllInvoices(filter, query string, page, limit int) ([]
 			conditions = append(conditions, "status = ?")
 			args = append(args, status)
 		default:
-			return nil, fmt.Errorf("Niepoprawny filtr: %s.", filter)
+			return nil, fmt.Errorf("invoice status filter %q is invalid", filter)
 		}
 	}
 	if query != "" {

@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	xsdvalidate "github.com/terminalstatic/go-xsd-validate"
 )
 
 type dashboardData struct {
@@ -79,30 +77,30 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 	bodyJson, err := io.ReadAll(r.Body)
 	if err != nil {
 		app.errorLog.Printf("event=invoice_request_read_failed error=%q", err.Error())
-		app.writeErrorRes(w, http.StatusInternalServerError, "internal_read_error", "The invoice request couldn't be read.")
+		app.writeErrorRes(w, http.StatusInternalServerError, "internal_read_error", "the invoice request could not be read.")
 		return
 	}
 	if err := json.Unmarshal(bodyJson, &inv); err != nil {
 		app.errorLog.Printf("event=invoice_json_invalid error=%q", err.Error())
-		app.writeErrorRes(w, http.StatusBadRequest, "malformed_request", "The received invoice is malformed.")
+		app.writeErrorRes(w, http.StatusBadRequest, "malformed_request", "the received invoice is malformed.")
 		return
 	}
 
 	app.infoLog.Printf("event=invoice_received external_id=%q", inv.InvoiceNumber)
 	if err := inv.ValidateInvoiceReceived(); err != nil {
 		app.errorLog.Printf("event=invoice_validation_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
-		app.writeErrorRes(w, http.StatusUnprocessableEntity, "incorrect_invoice", "The received invoice contains logical errors.")
+		app.writeErrorRes(w, http.StatusUnprocessableEntity, "incorrect_invoice", "the received invoice contains logical errors.")
 		return
 	}
 	xmlcontent, err := ksef.TransformToXML(&inv)
 	if err != nil {
 		app.errorLog.Printf("event=invoice_xml_transform_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
-		app.writeErrorRes(w, http.StatusInternalServerError, "xml_failure", "The invoice couldn't be transformed to XML.")
+		app.writeErrorRes(w, http.StatusInternalServerError, "xml_failure", "the invoice could not be transformed to XML.")
 		return
 	}
-	if err := app.xsdValidator.ValidateMem(xmlcontent, xsdvalidate.ValidErrDefault); err != nil {
+	if err := app.xsdValidator.Validate(r.Context(), xmlcontent); err != nil {
 		app.errorLog.Printf("event=invoice_xsd_validation_failed external_id=%q error=%q", inv.InvoiceNumber, err.Error())
-		app.writeErrorRes(w, http.StatusUnprocessableEntity, "validation_failure", "The invoice couldn't be validated.")
+		app.writeErrorRes(w, http.StatusUnprocessableEntity, "validation_failure", "the invoice could not be validated.")
 		return
 	}
 	var id int64
@@ -119,20 +117,20 @@ func (app *application) createInvoice(w http.ResponseWriter, r *http.Request) {
 			action = "created"
 			if err != nil {
 				app.errorLog.Printf("event=invoice_insert_failed external_id=%q error=%q", dbInv.ExternalId, err.Error())
-				app.writeErrorRes(w, http.StatusInternalServerError, "insertion_failure", "The invoice couldn't be saved to the database.")
+				app.writeErrorRes(w, http.StatusInternalServerError, "insertion_failure", "the invoice could not be saved to the database.")
 				return
 
 			}
 		} else {
 			app.errorLog.Printf("event=invoice_replace_failed external_id=%q error=%q", dbInv.ExternalId, err.Error())
-			app.writeErrorRes(w, http.StatusInternalServerError, "replacement_failure", "The invoice couldn't replace the previous version in the database.")
+			app.writeErrorRes(w, http.StatusInternalServerError, "replacement_failure", "the invoice could not replace the previous version in the database.")
 			return
 		}
 	}
 	app.infoLog.Printf("event=invoice_%s invoice_id=%d external_id=%q status=%q", action, id, inv.InvoiceNumber, models.StatusPending)
 	app.writeRes(w, http.StatusCreated, successRes{
 		Status:  "ok",
-		Message: fmt.Sprintf("The invoice has been %s.", action),
+		Message: fmt.Sprintf("the invoice has been %s.", action),
 		Data:    map[string]any{"id": id, "status": models.StatusPending},
 	})
 }
@@ -151,7 +149,8 @@ func (app *application) getDashboard(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("query")
 	data, err := app.dashboardHelper(filter, pageRaw, query, app.config.DashPageSize)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		app.errorLog.Printf("event=dashboard_load_failed error=%q", err.Error())
+		http.Error(w, "nie udało się załadować panelu.", http.StatusInternalServerError)
 		return
 	}
 	if r.Header.Get("HX-Request") != "" {
@@ -167,7 +166,8 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 	query := r.URL.Query().Get("query")
 	data, err := app.dashboardHelper(filter, pageRaw, query, app.config.DashPageSize)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+		app.errorLog.Printf("event=dashboard_invoices_load_failed error=%q", err.Error())
+		http.Error(w, "nie udało się pobrać listy faktur.", http.StatusInternalServerError)
 		return
 	}
 	app.infoLog.Printf("event=dashboard_page_loaded page=%d filter=%q count=%d", data.Page, data.CurrentFilter, len(data.Invoices))
@@ -175,14 +175,21 @@ func (app *application) getDashboardInvoices(w http.ResponseWriter, r *http.Requ
 }
 
 func (app *application) getDashboardInvoice(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	idRaw := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		app.errorLog.Printf("event=dashboard_invoice_id_invalid id=%q error=%q", idRaw, err.Error())
+		http.Error(w, "identyfikator faktury jest nieprawidłowy.", http.StatusBadRequest)
 		return
 	}
 	invoice, err := app.invoices.GetInvoice(id)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd przy pozyskiwaniu faktury: %v", err), http.StatusNotFound)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, fmt.Sprintf("nie znaleziono faktury o identyfikatorze %d.", id), http.StatusNotFound)
+		} else {
+			app.errorLog.Printf("event=dashboard_invoice_load_failed invoice_id=%d error=%q", id, err.Error())
+			http.Error(w, "nie udało się pobrać faktury.", http.StatusInternalServerError)
+		}
 		return
 	}
 	app.renderer.render(w, "invoice-container", invoice)
@@ -221,16 +228,19 @@ func (app *application) dashboardHelper(filter, pageRaw, query string, pageSize 
 }
 
 func (app *application) deleteDashboardInvoice(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	idRaw := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		app.errorLog.Printf("event=dashboard_invoice_id_invalid id=%q error=%q", idRaw, err.Error())
+		http.Error(w, "identyfikator faktury jest nieprawidłowy.", http.StatusBadRequest)
 		return
 	}
 	if err := app.invoices.DeleteInvoice(id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+			http.Error(w, fmt.Sprintf("nie znaleziono faktury o identyfikatorze %d.", id), http.StatusNotFound)
 		} else {
-			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+			app.errorLog.Printf("event=dashboard_invoice_delete_failed invoice_id=%d error=%q", id, err.Error())
+			http.Error(w, "nie udało się usunąć faktury.", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -245,13 +255,14 @@ func (app *application) getHealthLive(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getHealthReady(w http.ResponseWriter, r *http.Request) {
 	if app.xsdValidator == nil {
-		http.Error(w, "Narzędzie do walidacji plików XML nie jest uruchomione.", http.StatusServiceUnavailable)
+		http.Error(w, "walidator dokumentów XML nie jest gotowy.", http.StatusServiceUnavailable)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if err := app.invoices.DB.PingContext(ctx); err != nil {
-		http.Error(w, "Wystąpił problem z połączeniem z bazą danych.", http.StatusServiceUnavailable)
+		app.errorLog.Printf("event=database_readiness_check_failed error=%q", err.Error())
+		http.Error(w, "baza danych nie jest dostępna.", http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -269,7 +280,7 @@ func (app *application) getInvoiceStatus(w http.ResponseWriter, r *http.Request)
 	if externalId == "" {
 		id, err = strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 		if err != nil {
-			app.writeErrorRes(w, http.StatusBadRequest, "incorrect_query", "The ID has to be an integer, unless it's an external ID.")
+			app.writeErrorRes(w, http.StatusBadRequest, "incorrect_query", "the ID has to be an integer unless it is an external ID.")
 			return
 		}
 		inv, err = app.invoices.GetInvoice(id)
@@ -279,12 +290,13 @@ func (app *application) getInvoiceStatus(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			if externalId != "" {
-				app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("The invoice with external ID %s cannot be found.", externalId))
+				app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("the invoice with external ID %s cannot be found.", externalId))
 			} else {
-				app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("The invoice with ID %d cannot be found.", id))
+				app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("the invoice with ID %d cannot be found.", id))
 			}
 		} else {
-			app.writeErrorRes(w, http.StatusInternalServerError, "search_error", "The invoice could not be found.")
+			app.errorLog.Printf("event=invoice_status_load_failed invoice_id=%d external_id=%q error=%q", id, externalId, err.Error())
+			app.writeErrorRes(w, http.StatusInternalServerError, "search_error", "the invoice could not be found.")
 		}
 		return
 	}
@@ -303,22 +315,25 @@ func (app *application) getInvoiceStatus(w http.ResponseWriter, r *http.Request)
 	}
 	app.writeRes(w, http.StatusOK, successRes{
 		Status:  "ok",
-		Message: "Invoice status received.",
+		Message: "invoice status received.",
 		Data:    payload,
 	})
 }
 
 func (app *application) postDashboardRetryWebhook(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	idRaw := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusBadRequest)
+		app.errorLog.Printf("event=dashboard_invoice_id_invalid id=%q error=%q", idRaw, err.Error())
+		http.Error(w, "identyfikator faktury jest nieprawidłowy.", http.StatusBadRequest)
 		return
 	}
 	if err := app.invoices.ResetWebhookAttemptCount(id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, fmt.Sprintf("Nie można było znaleźć faktury o id %d.", id), http.StatusNotFound)
+			http.Error(w, fmt.Sprintf("nie znaleziono faktury o identyfikatorze %d.", id), http.StatusNotFound)
 		} else {
-			http.Error(w, fmt.Sprintf("Wystąpił błąd: %v", err), http.StatusInternalServerError)
+			app.errorLog.Printf("event=webhook_retry_reset_failed invoice_id=%d error=%q", id, err.Error())
+			http.Error(w, "nie udało się ponowić wysyłki webhooka.", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -329,20 +344,21 @@ func (app *application) postDashboardRetryWebhook(w http.ResponseWriter, r *http
 func (app *application) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 	externalId := r.URL.Query().Get("external_id")
 	if externalId == "" {
-		app.writeErrorRes(w, http.StatusBadRequest, "incorrect_query", "The invoice cannot be found due to an incorrect query.")
+		app.writeErrorRes(w, http.StatusBadRequest, "incorrect_query", "the invoice cannot be found due to an incorrect query.")
 		return
 	}
 	if err := app.invoices.DeleteInvoiceExternalId(externalId); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("The invoice with external ID %s cannot be found.", externalId))
+			app.writeErrorRes(w, http.StatusNotFound, "not_found", fmt.Sprintf("the invoice with external ID %s cannot be found.", externalId))
 		} else {
-			app.writeErrorRes(w, http.StatusInternalServerError, "deletion_failure", "The invoice could not be deleted.")
+			app.errorLog.Printf("event=invoice_delete_failed external_id=%q error=%q", externalId, err.Error())
+			app.writeErrorRes(w, http.StatusInternalServerError, "deletion_failure", "the invoice could not be deleted.")
 		}
 		return
 	}
 	app.writeRes(w, http.StatusOK, successRes{
 		Status:  "ok",
-		Message: "The invoice has been deleted.",
+		Message: "the invoice has been deleted.",
 		Data:    "",
 	})
 }

@@ -14,8 +14,8 @@ const (
 	InvoiceTypeKORROZ InvoiceType = "KOR_ROZ"
 )
 
-var INVALID_SESSION_ERR = errors.New("Invalid session reference.")
-var INVOICE_REJECTED_ERR = errors.New("KSeF rejected the invoice.")
+var INVALID_SESSION_ERR = errors.New("invalid session reference")
+var INVOICE_REJECTED_ERR = errors.New("KSeF rejected the invoice")
 
 type TaxRate string
 

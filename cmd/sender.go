@@ -51,7 +51,7 @@ func (app *application) sendInvoice(c chan struct{}) {
 					app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusPending, err.Error())
 				}
 			} else {
-				app.handleInvoiceFailure(inv, "Błąd autoryzacji sesji.")
+				app.handleInvoiceFailure(inv, "could not authenticate the KSeF session")
 			}
 		}
 		return
@@ -208,6 +208,7 @@ func (app *application) confirmInvoice(inv *models.Invoice) {
 		}
 		return
 	}
+	app.infoLog.Printf("event=upo_downloaded invoice_id=%d external_id=%q bytes=%d", inv.Id, inv.ExternalId, len(upoBytes))
 	upoXmlData := string(upoBytes)
 	if err = app.invoices.UpdateSentInvoice(inv.Id, *statusRes.KsefNumber, upoXmlData, *inv.SubmissionReference); err != nil {
 		app.errorLog.Printf("event=invoice_status_update_failed invoice_id=%d target_status=%q error=%q", inv.Id, models.StatusSent, err.Error())

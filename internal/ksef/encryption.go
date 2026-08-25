@@ -23,15 +23,15 @@ func (c *Client) getBothKeys() error {
 	fullUrl := fmt.Sprintf("%s/security/public-key-certificates", c.ApiURL)
 	res, err := c.httpClient.Get(fullUrl)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not retrieve the KSeF public keys: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("KSeF nie zwrócił klucza - kod statusu: %v", res.StatusCode)
+		return fmt.Errorf("could not retrieve the KSeF public keys: HTTP %d", res.StatusCode)
 	}
 	var keyRes []KeysResponse
 	if err := json.NewDecoder(res.Body).Decode(&keyRes); err != nil {
-		return err
+		return fmt.Errorf("could not decode the KSeF public-key response: %w", err)
 	}
 	for _, key := range keyRes {
 		certificateBytes, err := base64.StdEncoding.DecodeString(key.Certificate)
@@ -52,7 +52,7 @@ func (c *Client) getBothKeys() error {
 		}
 	}
 	if c.TokenPublicKey == nil || c.SessionPublicKey == nil {
-		return fmt.Errorf("Błąd przy pozyskiwaniu kluczy publicznych od KSeF.")
+		return fmt.Errorf("could not obtain usable public keys from KSeF")
 	}
 	return nil
 }

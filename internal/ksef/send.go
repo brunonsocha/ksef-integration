@@ -71,7 +71,7 @@ func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, erro
 	invSize := int64(len(raw_xml))
 	encInvCon, err := c.encryptCBC(raw_xml, inSession)
 	if err != nil {
-		return "", fmt.Errorf("Błąd w szyfrowaniu faktury: %v", err)
+		return "", fmt.Errorf("could not encrypt the invoice: %w", err)
 	}
 	encInvSize := int64(len(encInvCon))
 	encInvHash := hashSHA256(encInvCon)
@@ -114,9 +114,9 @@ func (c *Client) SendInvoice(raw_xml []byte, inSession *InSession) (string, erro
 			if errRes.Exception.ExceptionDetailList[0].ExceptionCode == 21180 {
 				return "", INVALID_SESSION_ERR
 			}
-			return "", fmt.Errorf("Ksef zwrócił błąd - kod statusu: %v - %v - %v", res.StatusCode, errRes.Exception.ExceptionDetailList[0].ExceptionDescription, errRes.Exception.ExceptionDetailList[0].ExceptionCode)
+			return "", fmt.Errorf("could not submit the invoice to KSeF: HTTP %d: %s (%d)", res.StatusCode, errRes.Exception.ExceptionDetailList[0].ExceptionDescription, errRes.Exception.ExceptionDetailList[0].ExceptionCode)
 		}
-		return "", fmt.Errorf("KSeF zwrócił błąd - kod statusu: %v - bez detali.", res.StatusCode)
+		return "", fmt.Errorf("could not submit the invoice to KSeF: HTTP %d without error details", res.StatusCode)
 	}
 	var invRes InvoiceResponse
 	if err := json.NewDecoder(res.Body).Decode(&invRes); err != nil {
@@ -179,14 +179,14 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 			return pollingOutcomeRes{
 				outcome:    temporaryFailure,
 				statusRes:  &invStatRes,
-				err:        fmt.Errorf("KSeF zwrócił błąd: %s", invStatRes.Status.Description),
+				err:        fmt.Errorf("could not obtain the invoice status from KSeF: %s", invStatRes.Status.Description),
 				httpStatus: res.StatusCode,
 			}
 		default:
 			return pollingOutcomeRes{
 				outcome:    badResponse,
 				statusRes:  &invStatRes,
-				err:        fmt.Errorf("KSeF zwrócił nieznany błąd: %s", invStatRes.Status.Description),
+				err:        fmt.Errorf("could not interpret the invoice status returned by KSeF: %s", invStatRes.Status.Description),
 				httpStatus: res.StatusCode,
 			}
 		}
@@ -198,7 +198,7 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 				return pollingOutcomeRes{
 					outcome:    rateLimited,
 					retryAfter: retryAfter,
-					err:        fmt.Errorf("KSeF otrzymał za dużo żądań."),
+					err:        errors.New("could not complete the KSeF request: rate limit exceeded"),
 					httpStatus: res.StatusCode,
 				}
 			}
@@ -207,20 +207,20 @@ func (c *Client) getInvoiceStatus(sessionRef, invoiceRef string) pollingOutcomeR
 		return pollingOutcomeRes{
 			outcome:    rateLimited,
 			retryAfter: retryAfter,
-			err:        fmt.Errorf("KSeF otrzymał za dużo żądań."),
+			err:        errors.New("could not complete the KSeF request: rate limit exceeded"),
 			httpStatus: res.StatusCode,
 		}
 	default:
 		if res.StatusCode >= 500 {
 			return pollingOutcomeRes{
 				outcome:    temporaryFailure,
-				err:        fmt.Errorf("Tymczasowy błąd: %d", res.StatusCode),
+				err:        fmt.Errorf("could not complete the KSeF request: temporary HTTP %d response", res.StatusCode),
 				httpStatus: res.StatusCode,
 			}
 		}
 		return pollingOutcomeRes{
 			outcome:    httpFail,
-			err:        fmt.Errorf("KSeF zwrócił błąd: %d", res.StatusCode),
+			err:        fmt.Errorf("could not complete the KSeF request: HTTP %d", res.StatusCode),
 			httpStatus: res.StatusCode,
 		}
 	}
@@ -233,12 +233,12 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 		switch pollingStatus.outcome {
 		case processingRes:
 			if i == maxAttempts-1 {
-				return nil, errors.New("KSeF nie potwierdził statusu faktury.")
+				return nil, errors.New("KSeF did not confirm the invoice status")
 			}
 			time.Sleep(c.PollingDelay)
 		case successRes:
 			if pollingStatus.statusRes.KsefNumber == nil {
-				return nil, fmt.Errorf("KSeF potwierdził otrzymanie faktury, ale nie nadał numeru KSeF")
+				return nil, errors.New("KSeF accepted the invoice but did not assign a KSeF number")
 			}
 			return pollingStatus.statusRes, nil
 		case rateLimited:
@@ -247,32 +247,32 @@ func (c *Client) WaitForSendingConfirmation(maxAttempts int, sessionRef, invoice
 		case temporaryFailure:
 			lastErr = pollingStatus.err
 			if i == maxAttempts-1 {
-				return nil, fmt.Errorf("Nie można było wysłać faktury")
+				return nil, errors.New("could not confirm the invoice status after a temporary KSeF failure")
 			}
 			time.Sleep(c.PollingDelay)
 		case httpFail, badResponse:
 			lastErr = pollingStatus.err
-			return nil, fmt.Errorf("Wystąpił błąd: %v - %d", pollingStatus.err, pollingStatus.httpStatus)
+			return nil, fmt.Errorf("could not confirm the invoice status: %w (HTTP %d)", pollingStatus.err, pollingStatus.httpStatus)
 		case rejected:
-			return nil, fmt.Errorf("%w: %d - %s - %s - %s", INVOICE_REJECTED_ERR, pollingStatus.statusRes.Status.Code, pollingStatus.statusRes.Status.Description, pollingStatus.statusRes.Status.Extensions, pollingStatus.statusRes.Status.Details)
+			return nil, fmt.Errorf("%w: code=%d, description=%s, extensions=%v, details=%v", INVOICE_REJECTED_ERR, pollingStatus.statusRes.Status.Code, pollingStatus.statusRes.Status.Description, pollingStatus.statusRes.Status.Extensions, pollingStatus.statusRes.Status.Details)
 		}
 	}
-	return nil, fmt.Errorf("Doszło do timeoutu po %d próbach, ostatni znany błąd to %v.", maxAttempts, lastErr)
+	return nil, fmt.Errorf("could not confirm the invoice after %d attempts: last error: %w", maxAttempts, lastErr)
 }
 
 func (c *Client) DownloadUPO(upoUrl string) ([]byte, error) {
 	res, err := c.httpClient.Get(upoUrl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not download the UPO: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Wystąpił błąd przy pobieraniu UPO - kod statusu %d.", res.StatusCode)
+		return nil, fmt.Errorf("could not download the UPO: HTTP %d", res.StatusCode)
 	}
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read the UPO response: %w", err)
 	}
 	return buf.Bytes(), nil
 }

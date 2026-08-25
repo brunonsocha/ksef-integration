@@ -23,14 +23,14 @@ func (c *Client) OpenInSession() (*InSession, error) {
 	aesKey := make([]byte, 32)
 	iv := make([]byte, 16)
 	if _, err := rand.Read(aesKey); err != nil {
-		return nil, fmt.Errorf("Błąd w generowaniu klucza: %v", err)
+		return nil, fmt.Errorf("could not generate the encryption key: %w", err)
 	}
 	if _, err := rand.Read(iv); err != nil {
-		return nil, fmt.Errorf("Błąd w generowaniu wektora inicjalizującego: %v", err)
+		return nil, fmt.Errorf("could not generate the initialization vector: %w", err)
 	}
 	encryptedKey, err := c.encryptWithPKey(aesKey, c.SessionPublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("Błąd przy enkrypcji klucza: %v", err)
+		return nil, fmt.Errorf("could not encrypt the session key: %w", err)
 	}
 	payload := InteractiveSessionPayload{
 		FormCode: SessionFormCode{
@@ -59,7 +59,7 @@ func (c *Client) OpenInSession() (*InSession, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("Nie można było rozpocząć sesji interaktywnej, Ksef zwrócił %v.", res.StatusCode)
+		return nil, fmt.Errorf("could not open a KSeF interactive session: HTTP %d", res.StatusCode)
 	}
 	var inRes InteractiveSessionResponse
 	if err := json.NewDecoder(res.Body).Decode(&inRes); err != nil {
@@ -98,8 +98,11 @@ func (c *Client) CloseInSession(inSession *InSession) error {
 				} `json:"exceptionDetailList"`
 			} `json:"exception"`
 		}
-		json.NewDecoder(res.Body).Decode(&errRes)
-		return fmt.Errorf("Ksef nie zamknął sesji i zwrócił kod statusu %v - %v - %v", res.StatusCode, errRes.Exception.ExceptionDetailList[0].ExceptionDescription, errRes.Exception.ExceptionDetailList[0].ExceptionCode)
+		if err := json.NewDecoder(res.Body).Decode(&errRes); err == nil && len(errRes.Exception.ExceptionDetailList) > 0 {
+			detail := errRes.Exception.ExceptionDetailList[0]
+			return fmt.Errorf("could not close the KSeF interactive session: HTTP %d: %s (%d)", res.StatusCode, detail.ExceptionDescription, detail.ExceptionCode)
+		}
+		return fmt.Errorf("could not close the KSeF interactive session: HTTP %d", res.StatusCode)
 	}
 	return nil
 }

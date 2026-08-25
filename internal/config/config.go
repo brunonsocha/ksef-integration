@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/goccy/go-yaml"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -35,7 +34,6 @@ type Config struct {
 	User struct {
 		Max_retries int `yaml:"max_retries"`
 	} `yaml:"user"`
-	XSDPath            string `yaml:"xsd_path"`
 	DashPageSize       int    `yaml:"dash_page_size"`
 	PollingInterval    int    `yaml:"polling_interval"`
 	ShutdownTimeoutSec int    `yaml:"shutdown_timeout_sec"`
@@ -48,7 +46,7 @@ func Load(f io.Reader) (*Config, error) {
 	var config Config
 	decoder := yaml.NewDecoder(f)
 	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("Niepoprawna składnia pliku .yaml - %v", err)
+		return nil, fmt.Errorf("configuration contains invalid YAML: %w", err)
 	}
 	return &config, nil
 }
@@ -56,54 +54,49 @@ func Load(f io.Reader) (*Config, error) {
 func (c *Config) Validate() error {
 	var errors []string
 	if c.Ksef.Nip == "" {
-		errors = append(errors, "Brakuje NIP.")
+		errors = append(errors, "KSeF NIP is required")
 	}
 	if c.Ksef.Url == "" {
-		errors = append(errors, "Brakuje adresu URL KSeF.")
+		errors = append(errors, "KSeF URL is required")
 	}
 	if c.Ksef.HttpTimeoutSec <= 0 {
-		errors = append(errors, "Timeout klienta HTTP KSeF musi być większy niż 0 sekund.")
+		errors = append(errors, "KSeF HTTP timeout must be greater than 0 seconds")
 	}
 	if c.Ksef.AuthRetryDelaySec <= 0 {
-		errors = append(errors, "Opóźnienie ponowienia autoryzacji musi być większe niż 0 sekund.")
+		errors = append(errors, "authentication retry delay must be greater than 0 seconds")
 	}
 	if c.Ksef.PollingDelaySec <= 0 {
-		errors = append(errors, "Opóźnienie przy sprawdzaniu statusu faktury musi być większe niż 0 sekund.")
+		errors = append(errors, "invoice-status polling delay must be greater than 0 seconds")
 	}
 	if c.Ksef.ConfirmationMaxAttempts <= 0 {
-		errors = append(errors, "Maksymalna liczba prób potwierdzenia musi być większa niż 0.")
+		errors = append(errors, "confirmation attempt limit must be greater than 0")
 	}
 	if c.Sqlite.Db_path == "" {
-		errors = append(errors, "Brakuje ścieżki do bazy danych.")
+		errors = append(errors, "database path is required")
 	}
 	if c.Sqlite.BusyTimeoutMs <= 0 {
-		errors = append(errors, "Timeout oczekiwania SQLite musi być większy niż 0 milisekund.")
+		errors = append(errors, "SQLite busy timeout must be greater than 0 milliseconds")
 	}
 	if c.Server.Port == "" {
-		errors = append(errors, "Brakuje portu, na którym ma działać aplikacja.")
-	}
-	if c.XSDPath == "" {
-		errors = append(errors, "Brakuje ścieżki do schematu XSD.")
-	} else if _, err := os.Stat(c.XSDPath); err != nil {
-		errors = append(errors, "Niepoprawna ścieżka do schematu XSD.")
+		errors = append(errors, "server port is required")
 	}
 	if c.User.Max_retries < 0 {
-		errors = append(errors, "Maksymalna ilość prób ponownych musi być minimum 0.")
+		errors = append(errors, "retry limit must be at least 0")
 	}
 	if c.DashPageSize <= 0 {
-		errors = append(errors, "Strony w panelu nie mogą mieścić zera faktur.")
+		errors = append(errors, "dashboard page size must be greater than 0")
 	}
 	if c.PollingInterval <= 0 {
-		errors = append(errors, "Próby ponowne nie mogą być podejmowane co mniej niż 1 sekundę.")
+		errors = append(errors, "retry polling interval must be at least 1 second")
 	}
 	if c.ShutdownTimeoutSec <= 0 {
-		errors = append(errors, "Zamknięcie nie może występować w mniej niż 1 sekundę.")
+		errors = append(errors, "shutdown timeout must be at least 1 second")
 	}
 	if c.SenderBatchSize <= 0 {
-		errors = append(errors, "Batch wysyłki musi być większy niż 0.")
+		errors = append(errors, "sender batch size must be greater than 0")
 	}
 	if c.SenderWorkerLimit <= 0 {
-		errors = append(errors, "Limit równoległych zadań wysyłki musi być większy niż 0.")
+		errors = append(errors, "sender worker limit must be greater than 0")
 	}
 	if len(errors) > 0 {
 		return fmt.Errorf("%s", strings.Join(errors, ", "))

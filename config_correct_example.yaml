@@ -22,7 +22,6 @@ runonce:
 
 user:
     max_retries: 5
-xsd_path: "./xsd/xsd_schema.xsd"
 dash_page_size: 50
 polling_interval: 10
 shutdown_timeout_sec: 30

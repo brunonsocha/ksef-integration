@@ -1,23 +1,26 @@
 package main
 
 import (
-	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 )
 
 type renderer struct {
-	cache *template.Template
+	cache    *template.Template
+	errorLog *log.Logger
 }
 
-func newRenderer() *renderer {
+func newRenderer(errorLog *log.Logger) *renderer {
 	return &renderer{
-		cache: template.Must(template.ParseGlob("ui/html/*.html")),
+		cache:    template.Must(template.ParseGlob("ui/html/*.html")),
+		errorLog: errorLog,
 	}
 }
 
 func (r *renderer) render(w http.ResponseWriter, name string, data any) {
 	if err := r.cache.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, fmt.Sprintf("Błąd w renderowaniu templatki: %v", err), http.StatusInternalServerError)
+		r.errorLog.Printf("event=template_render_failed template=%q error=%q", name, err.Error())
+		http.Error(w, "nie udało się wyświetlić strony.", http.StatusInternalServerError)
 	}
 }

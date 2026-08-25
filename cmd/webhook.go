@@ -23,7 +23,7 @@ type webhookPayload struct {
 
 func (app *application) notifyWebhook(inv *models.Invoice) error {
 	if inv.CallbackURL == nil {
-		return errors.New("event=webhook_delivery_skipped reason=missing_callback_url")
+		return errors.New("could not deliver the webhook: callback URL is missing")
 	}
 	callback := inv.CallbackURL
 	var eventMessage string
@@ -33,7 +33,7 @@ func (app *application) notifyWebhook(inv *models.Invoice) error {
 	case models.StatusSent:
 		eventMessage = "invoice.accepted"
 	default:
-		return fmt.Errorf("event=webhook_delivery_skipped reason=unexpected_invoice_status")
+		return fmt.Errorf("could not deliver the webhook: invoice status %q is not terminal", inv.Status)
 	}
 	payload := webhookPayload{
 		Event:               eventMessage,
@@ -61,7 +61,7 @@ func (app *application) notifyWebhook(inv *models.Invoice) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode > 299 || res.StatusCode < 200 {
-		return fmt.Errorf("event=webhook_delivery_rejected status_code=%d", res.StatusCode)
+		return fmt.Errorf("could not deliver the webhook: HTTP %d", res.StatusCode)
 	}
 	return nil
 }
@@ -76,5 +76,7 @@ func (app *application) deliverWebhook(inv *models.Invoice) {
 	}
 	if err := app.invoices.UpdateWebhookDelivered(inv.Id); err != nil {
 		app.errorLog.Printf("event=webhook_success_state_update_failed invoice_id=%d error=%q", inv.Id, err.Error())
+		return
 	}
+	app.infoLog.Printf("event=webhook_delivered invoice_id=%d external_id=%q", inv.Id, inv.ExternalId)
 }

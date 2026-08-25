@@ -3,6 +3,7 @@ package ksef
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -85,7 +86,7 @@ func (c *Client) getChallenge() (*ChallengeResponse, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Wystąpił błąd - KSeF zwrócił odpowiedź o kodzie %d.", response.StatusCode)
+		return nil, fmt.Errorf("could not obtain an authentication challenge from KSeF: HTTP %d", response.StatusCode)
 	}
 	var cha ChallengeResponse
 	if err := json.NewDecoder(response.Body).Decode(&cha); err != nil {
@@ -120,7 +121,7 @@ func (c *Client) startSession(encryptedToken []byte, cha *ChallengeResponse) (*A
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("Wystąpił błąd - KSeF nie zaakceptował tokena - odpowiedź o kodzie %d.", response.StatusCode)
+		return nil, fmt.Errorf("KSeF rejected the authentication token: HTTP %d", response.StatusCode)
 	}
 	var authRes AuthenticationResponse
 	if err := json.NewDecoder(response.Body).Decode(&authRes); err != nil {
@@ -157,15 +158,15 @@ func (c *Client) redeemToken(authRes *AuthenticationResponse) (*RedeemResponse, 
 			time.Sleep(c.AuthRetryDelay)
 			continue
 		}
-		return nil, fmt.Errorf("KSeF nie zwrócił tokena - błąd %d", response.StatusCode)
+		return nil, fmt.Errorf("KSeF did not return an access token: HTTP %d", response.StatusCode)
 
 	}
-	return nil, fmt.Errorf("Nie udało się pobrać tokena.")
+	return nil, errors.New("could not obtain an access token from KSeF")
 }
 
 func (c *Client) refreshToken() error {
 	if c.RefreshToken == "" {
-		return fmt.Errorf("Nie można było znaleźć tokena do odświeżenia.")
+		return errors.New("could not refresh the KSeF token: no current token is available")
 	}
 	posturl := c.ApiURL + "/auth/token/refresh"
 	r, err := http.NewRequest("POST", posturl, bytes.NewBuffer([]byte("{}")))
@@ -181,7 +182,7 @@ func (c *Client) refreshToken() error {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("KSeF nie odświeżył tokena - błąd %d.", response.StatusCode)
+		return fmt.Errorf("could not refresh the KSeF token: HTTP %d", response.StatusCode)
 	}
 	var refreshRes RefreshResponse
 	if err := json.NewDecoder(response.Body).Decode(&refreshRes); err != nil {

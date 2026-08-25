@@ -17,25 +17,25 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	switch i.InvoiceType {
 	case InvoiceTypeVAT, InvoiceTypeKOR, InvoiceTypeZAL, InvoiceTypeROZ, InvoiceTypeUPR, InvoiceTypeKORROZ, InvoiceTypeKORZAL:
 	default:
-		return errors.New("Invalid invoice type.")
+		return errors.New("invalid invoice type")
 	}
 	_, err := time.Parse("2006-01-02", i.IssueDate)
 	if err != nil {
-		return errors.New("Invalid date format (issue date).")
+		return errors.New("invalid date format (issue date)")
 	}
 	if i.InvoiceType == InvoiceTypeKOR || i.InvoiceType == InvoiceTypeKORROZ || i.InvoiceType == InvoiceTypeKORZAL {
 		if i.OriginalInvoiceNumber == nil || i.CorrectionReason == nil || i.OriginalKsefId == nil {
-			return errors.New("Missing details (correction data).")
+			return errors.New("missing details (correction data)")
 		}
 		if i.OriginalIssueDate == nil {
-			return errors.New("Missing original issue date on a corrective invoice.")
+			return errors.New("missing original issue date on a corrective invoice")
 		}
 		_, err := time.Parse("2006-01-02", *i.OriginalIssueDate)
 		if err != nil {
-			return errors.New("Invalid date format (original issue date).")
+			return errors.New("invalid date format (original issue date)")
 		}
 		if i.CorrectedBuyer != nil && (i.CorrectedBuyer.Name == nil || i.CorrectedBuyer.AddressLine1 == nil || !validateNIP(i.CorrectedBuyer.Nip)) {
-			return errors.New("Missing data for corrected buyer/")
+			return errors.New("missing data for corrected buyer")
 		}
 		if i.CorrectedBuyer != nil && i.CorrectedBuyer.CountryCode == nil {
 			cc := "PL"
@@ -43,95 +43,95 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 		}
 	} else {
 		if i.OriginalInvoiceNumber != nil || i.CorrectionReason != nil || i.OriginalKsefId != nil || i.OriginalIssueDate != nil || i.CorrectedBuyer != nil {
-			return errors.New("Incorrect details (correction data on non-corrective invoice).")
+			return errors.New("incorrect details (correction data on non-corrective invoice)")
 		}
 	}
 	if i.Currency == nil || len(*i.Currency) != 3 {
-		return errors.New("Incorrect currency data.")
+		return errors.New("incorrect currency data")
 	}
 	if (*i.Currency != "PLN" && i.ExchangeRate == nil) || (*i.Currency == "PLN" && i.ExchangeRate != nil) {
-		return errors.New("Missing data for the chosen currency (exchange rate was specified for PLN or unspecified for foreign).")
+		return errors.New("missing data for the chosen currency (exchange rate was specified for PLN or unspecified for foreign)")
 	}
 	if i.ExchangeRate != nil && *i.ExchangeRate <= 0 {
-		return errors.New("Exchange rate must be greater than zero.")
+		return errors.New("exchange rate must be greater than zero")
 	}
 	if i.Payment != nil {
 		if i.Payment.DueDate == nil && i.Payment.MethodCode == nil && i.Payment.BankAccount == nil && i.Payment.BankName == nil {
-			return errors.New("Payment details cannot be empty.")
+			return errors.New("payment details cannot be empty")
 		}
 		if i.Payment.DueDate != nil {
 			if _, err := time.Parse("2006-01-02", *i.Payment.DueDate); err != nil {
-				return errors.New("Invalid payment due date format.")
+				return errors.New("invalid payment due date format")
 			}
 		}
 		if i.Payment.MethodCode != nil {
 			methodCode, err := strconv.Atoi(*i.Payment.MethodCode)
 			if err != nil || methodCode < 1 || methodCode > 7 {
-				return errors.New("Invalid payment method code.")
+				return errors.New("invalid payment method code")
 			}
 		}
 		if i.Payment.BankName != nil && i.Payment.BankAccount == nil {
-			return errors.New("Bank account is required when bank name is provided.")
+			return errors.New("bank account is required when bank name is provided")
 		}
 		if i.Payment.BankAccount != nil && (len(*i.Payment.BankAccount) < 10 || len(*i.Payment.BankAccount) > 34) {
-			return errors.New("Bank account number must contain between 10 and 34 characters.")
+			return errors.New("bank account number must contain between 10 and 34 characters")
 		}
 	}
 	if len(i.Items) == 0 {
-		return errors.New("Empty invoice.")
+		return errors.New("empty invoice")
 	}
 	lineNumbers := make(map[int]struct{})
 	for _, item := range i.Items {
 		if item.LineNumber <= 0 {
-			return errors.New("Line number must be greater than zero.")
+			return errors.New("line number must be greater than zero")
 		}
 		if _, exists := lineNumbers[item.LineNumber]; exists {
-			return errors.New("Line numbers must be unique.")
+			return errors.New("line numbers must be unique")
 		}
 		lineNumbers[item.LineNumber] = struct{}{}
 		if i.InvoiceType != InvoiceTypeKOR && i.InvoiceType != InvoiceTypeKORZAL && i.InvoiceType != InvoiceTypeKORROZ {
 			if item.NetAmount < 0 {
-				return errors.New("Net amount can't be negative.")
+				return errors.New("net amount cannot be negative")
 			}
 		}
 		if item.Quantity != nil && item.UnitPriceNet == nil {
-			return errors.New("Unit price cannot be empty.")
+			return errors.New("unit price cannot be empty")
 		}
 		switch item.TaxRate {
 		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
 		default:
-			return errors.New("Invalid tax rate (line items.")
+			return errors.New("invalid tax rate (line items)")
 		}
 	}
 	if !validateNIP(i.Buyer.Nip) || !validateNIP(i.Seller.Nip) {
-		return errors.New("Incorrect NIP values.")
+		return errors.New("incorrect NIP values")
 	}
 	if i.Seller.Name == nil || i.Seller.AddressLine1 == nil {
-		return errors.New("Missing seller details.")
+		return errors.New("missing seller details")
 	}
 	if i.InvoiceType != InvoiceTypeUPR {
 		if i.Buyer.Name == nil || i.Buyer.AddressLine1 == nil {
-			return errors.New("Missing buyer details on a non-UPR invoice.")
+			return errors.New("missing buyer details on a non-UPR invoice")
 		}
 	}
 	if len(i.TaxBreakdowns) == 0 {
-		return errors.New("Missing tax breakdowns.")
+		return errors.New("missing tax breakdowns")
 	}
 	for _, taxbr := range i.TaxBreakdowns {
 		switch taxbr.TaxRate {
 		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
 		default:
-			return errors.New("Invalid tax rate (tax breakdown).")
+			return errors.New("invalid tax rate (tax breakdown)")
 		}
 		taxable := taxbr.TaxRate == TaxRate23 || taxbr.TaxRate == TaxRate22 || taxbr.TaxRate == TaxRate8 || taxbr.TaxRate == TaxRate7 || taxbr.TaxRate == TaxRate5 || taxbr.TaxRate == TaxRate4
 		if *i.Currency != "PLN" && taxable && taxbr.TaxAmountPln == nil {
-			return errors.New("Missing tax amount in PLN for foreign-currency invoice.")
+			return errors.New("missing tax amount in PLN for foreign-currency invoice")
 		}
 		if *i.Currency == "PLN" && taxbr.TaxAmountPln != nil {
-			return errors.New("Tax amount in PLN must not be provided for a PLN invoice.")
+			return errors.New("PLN tax amount must not be provided for a PLN invoice")
 		}
 		if !taxable && taxbr.TaxAmountPln != nil {
-			return errors.New("Tax amount in PLN must not be provided for a non-taxable breakdown.")
+			return errors.New("PLN tax amount must not be provided for a non-taxable breakdown")
 		}
 	}
 	defaultCountryCode := "PL"
@@ -157,32 +157,32 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 		switch k.TaxRate {
 		case TaxRateZW, TaxRateOO, TaxRateNPII, TaxRateNPI, TaxRate0KR, TaxRate0EX, TaxRate0WDT:
 			if k.TaxAmount != nil {
-				return errors.New("Tax amount incorrect for the 0% tax rate.")
+				return errors.New("tax amount incorrect for the 0% tax rate")
 			}
 			requiresTax = false
 		}
 		if k.TaxAmount != nil && requiresTax {
 			totalTax += *k.TaxAmount
 		} else if k.TaxAmount == nil && requiresTax {
-			return errors.New("Tax amount missing for non-0 tax rate.")
+			return errors.New("tax amount missing for non-0 tax rate")
 		}
 	}
 	for taxRate, itemNet := range itemNetByTaxRate {
 		breakdownNet, exists := breakdownNetByTaxRate[taxRate]
 		if !exists {
-			return fmt.Errorf("Missing tax breakdown for tax rate %s.", taxRate)
+			return fmt.Errorf("missing tax breakdown for tax rate %s", taxRate)
 		}
 		if itemNet != breakdownNet {
-			return fmt.Errorf("Net amount for tax rate %s does not match its tax breakdown.", taxRate)
+			return fmt.Errorf("net amount for tax rate %s does not match its tax breakdown", taxRate)
 		}
 	}
 	for taxRate := range breakdownNetByTaxRate {
 		if _, exists := itemNetByTaxRate[taxRate]; !exists {
-			return fmt.Errorf("Tax breakdown for tax rate %s has no corresponding line items.", taxRate)
+			return fmt.Errorf("tax breakdown for tax rate %s has no corresponding line items", taxRate)
 		}
 	}
 	if totalNet != totalNetTax || totalNet+totalTax != i.TotalAmount {
-		return fmt.Errorf("Incorrect line items. Total netto in line items: %f, total netto in tax breakdowns: %f, total tax: %f, total amount: %f.", totalNet, totalNetTax, totalTax, i.TotalAmount)
+		return fmt.Errorf("incorrect line items: total netto in line items=%f, total netto in tax breakdowns=%f, total tax=%f, total amount=%f", totalNet, totalNetTax, totalTax, i.TotalAmount)
 	}
 	return nil
 }

@@ -2,19 +2,20 @@ package main
 
 import (
 	"context"
-	xsdvalidate "github.com/terminalstatic/go-xsd-validate"
 	"ksef-integration/internal/config"
 	"ksef-integration/internal/database"
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
+	xsdinvoices "ksef-integration/xsd"
 	"log"
-	_ "modernc.org/sqlite"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type application struct {
@@ -24,7 +25,7 @@ type application struct {
 	config            *config.Config
 	ksefClient        *ksef.Client
 	renderer          *renderer
-	xsdValidator      *xsdvalidate.XsdHandler
+	xsdValidator      *xsdinvoices.Validator
 	httpClient        *http.Client
 	appApiKey         string
 	dashboardUsername string
@@ -33,7 +34,7 @@ type application struct {
 
 func main() {
 	infoLog := log.New(os.Stdout, "[INFO]\t", log.Ltime)
-	errorLog := log.New(os.Stderr, "[BŁĄD]\t", log.Ltime)
+	errorLog := log.New(os.Stderr, "[ERROR]\t", log.Ltime)
 	f, err := os.Open("config.yaml")
 	if err != nil {
 		errorLog.Fatal(err)
@@ -77,16 +78,11 @@ func main() {
 		errorLog.Fatal(err)
 	}
 	infoLog.Printf("event=db_ready")
-	if err := xsdvalidate.Init(); err != nil {
-		errorLog.Fatal(err)
-	}
-	defer xsdvalidate.Cleanup()
-	xsdValidator, err := xsdvalidate.NewXsdHandlerUrl(cfg.XSDPath, xsdvalidate.ParsErrDefault)
+	xsdValidator, err := xsdinvoices.New(context.Background())
 	if err != nil {
 		errorLog.Fatal(err)
 	}
-	defer xsdValidator.Free()
-	infoLog.Printf("event=xsd_validator_ready xsd_path=%q", cfg.XSDPath)
+	infoLog.Printf("event=xsd_validator_ready")
 	client := http.Client{
 		Timeout: time.Duration(cfg.Ksef.HttpTimeoutSec) * time.Second,
 	}
@@ -105,7 +101,7 @@ func main() {
 			cfg.Ksef.AuthRetryDelaySec,
 			cfg.Ksef.PollingDelaySec,
 		),
-		renderer:          newRenderer(),
+		renderer:          newRenderer(errorLog),
 		xsdValidator:      xsdValidator,
 		httpClient:        &client,
 		appApiKey:         appApiKey,

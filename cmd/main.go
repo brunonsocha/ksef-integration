@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"ksef-integration/internal/config"
 	"ksef-integration/internal/database"
 	"ksef-integration/internal/ksef"
@@ -119,10 +120,21 @@ func main() {
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
 		Handler: app.routes(),
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 	go func() {
-		app.infoLog.Printf("event=server_started addr=%q", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		scheme := "http"
+		serve := srv.ListenAndServe
+		if cfg.Server.TLSCertPath != "" && cfg.Server.TLSKeyPath != "" {
+			scheme = "https"
+			serve = func() error {
+				return srv.ListenAndServeTLS(cfg.Server.TLSCertPath, cfg.Server.TLSKeyPath)
+			}
+		}
+		app.infoLog.Printf("event=server_started scheme=%q addr=%q", scheme, srv.Addr)
+		if err := serve(); err != nil && err != http.ErrServerClosed {
 			app.errorLog.Fatalf("event=server_failed error=%q", err.Error())
 		}
 	}()

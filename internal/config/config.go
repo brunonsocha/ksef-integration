@@ -27,6 +27,8 @@ type Config struct {
 	} `yaml:"sqlite"`
 	Server struct {
 		Port string `yaml:"port"`
+		TLSCertPath string `yaml:"tls_cert_path"`
+		TLSKeyPath string `yaml:"tls_key_path"`
 	}
 	Runonce struct {
 		Xml_path string `yaml:"xml_path"`
@@ -97,6 +99,10 @@ func (c *Config) Validate() error {
 	}
 	if c.SenderWorkerLimit <= 0 {
 		errors = append(errors, "sender worker limit must be greater than 0")
+	}
+	// i think this is a XOR?
+	if (c.Server.TLSCertPath == "") != (c.Server.TLSKeyPath == "") {
+		errors = append(errors, "TLS certificate and key paths need to be configured")
 	}
 	if len(errors) > 0 {
 		return fmt.Errorf("%s", strings.Join(errors, ", "))

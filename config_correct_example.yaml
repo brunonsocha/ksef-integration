@@ -16,6 +16,8 @@ sqlite:
 
 server:
     port: "8080"
+    tls_cert_path: ""
+    tls_key_path: ""
 
 runonce:
     xml_path: ""

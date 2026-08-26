@@ -14,5 +14,6 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
+      - ./certs:/run/ksef-tls:ro
     working_dir: /app
     restart: unless-stopped

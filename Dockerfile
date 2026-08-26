@@ -1,4 +1,4 @@
-FROM golang:1.25-trixie AS builder
+FROM golang:1.26.1-trixie AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

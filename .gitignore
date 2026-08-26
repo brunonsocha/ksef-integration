@@ -1,3 +1,4 @@
+certs/
 dbcon.sh
 token.txt
 data/*.db

@@ -13,6 +13,25 @@ import (
 
 // currencies and country codes will be validated just by checking their length and whether they're upper case letters
 
+func validateUPRLimit(currency string, total float64) error {
+	if total <= 0 {
+		return errors.New("UPR invoice total must be greater than zero")
+	}
+	switch currency {
+	case "PLN":
+		if total > 450 {
+			return errors.New("UPR invoice total cannot exceed 450 PLN")
+		}
+	case "EUR":
+		if total > 100 {
+			return errors.New("UPR invoice total cannot exceed 100 EUR")
+		}
+	default:
+		return errors.New("UPR invoices are supported only in PLN or EUR")
+	}
+	return nil
+}
+
 func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	switch i.InvoiceType {
 	case InvoiceTypeVAT, InvoiceTypeKOR, InvoiceTypeZAL, InvoiceTypeROZ, InvoiceTypeUPR, InvoiceTypeKORROZ, InvoiceTypeKORZAL:
@@ -54,6 +73,11 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	}
 	if i.ExchangeRate != nil && *i.ExchangeRate <= 0 {
 		return errors.New("exchange rate must be greater than zero")
+	}
+	if i.InvoiceType == InvoiceTypeUPR {
+		if err := validateUPRLimit(*i.Currency, i.TotalAmount); err != nil {
+			return err
+		}
 	}
 	if i.Payment != nil {
 		if i.Payment.DueDate == nil && i.Payment.MethodCode == nil && i.Payment.BankAccount == nil && i.Payment.BankName == nil {
@@ -103,8 +127,11 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 			return errors.New("invalid tax rate (line items)")
 		}
 	}
-	if !validateNIP(i.Buyer.Nip) || !validateNIP(i.Seller.Nip) {
-		return errors.New("incorrect NIP values")
+	if !validateNIP(i.Seller.Nip) {
+		return errors.New("incorrect seller NIP")
+	}
+	if !validateNIP(i.Buyer.Nip) {
+		return errors.New("incorrect buyer NIP")
 	}
 	if i.Seller.Name == nil || i.Seller.AddressLine1 == nil {
 		return errors.New("missing seller details")
@@ -113,6 +140,12 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 		if i.Buyer.Name == nil || i.Buyer.AddressLine1 == nil {
 			return errors.New("missing buyer details on a non-UPR invoice")
 		}
+	}
+	if i.Buyer.AddressLine2 != nil && i.Buyer.AddressLine1 == nil {
+		return errors.New("buyer address line 1 is required when address line 2 is provided")
+	}
+	if i.Buyer.CountryCode != nil && i.Buyer.AddressLine1 == nil {
+		return errors.New("buyer address is required when a country code is provided")
 	}
 	if len(i.TaxBreakdowns) == 0 {
 		return errors.New("missing tax breakdowns")
@@ -138,7 +171,7 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	if i.Seller.CountryCode == nil {
 		i.Seller.CountryCode = &defaultCountryCode
 	}
-	if i.Buyer.Name != nil && i.Buyer.CountryCode == nil {
+	if i.Buyer.AddressLine1 != nil && i.Buyer.CountryCode == nil {
 		i.Buyer.CountryCode = &defaultCountryCode
 	}
 	totalNet := 0.0
@@ -266,9 +299,9 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 
 	if (inv.InvoiceType == InvoiceTypeKOR || inv.InvoiceType == InvoiceTypeKORZAL || inv.InvoiceType == InvoiceTypeKORROZ) && inv.CorrectedBuyer != nil {
 		fa.Podmiot2 = &Podmiot2{
-			DaneIdentyfikacyjne: DaneIdentyfikacyjne{
+			DaneIdentyfikacyjne: DaneIdentyfikacyjnePodmiot2{
 				NIP:   inv.CorrectedBuyer.Nip,
-				Nazwa: *inv.CorrectedBuyer.Name,
+				Nazwa: inv.CorrectedBuyer.Name,
 			},
 			Adres: &Adres{
 				KodKraju: *inv.CorrectedBuyer.CountryCode,
@@ -281,18 +314,18 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			fa.Podmiot2.Adres.AdresL2 = *inv.CorrectedBuyer.AddressLine2
 		}
 	} else {
-		if inv.Buyer.Name != nil && inv.Buyer.AddressLine1 != nil {
-			fa.Podmiot2 = &Podmiot2{
-				DaneIdentyfikacyjne: DaneIdentyfikacyjne{
-					NIP:   inv.Buyer.Nip,
-					Nazwa: *inv.Buyer.Name,
-				},
-				Adres: &Adres{
-					KodKraju: *inv.Buyer.CountryCode,
-					AdresL1:  *inv.Buyer.AddressLine1,
-				},
-				JST: 2,
-				GV:  2,
+		fa.Podmiot2 = &Podmiot2{
+			DaneIdentyfikacyjne: DaneIdentyfikacyjnePodmiot2{
+				NIP:   inv.Buyer.Nip,
+				Nazwa: inv.Buyer.Name,
+			},
+			JST: 2,
+			GV:  2,
+		}
+		if inv.Buyer.AddressLine1 != nil {
+			fa.Podmiot2.Adres = &Adres{
+				KodKraju: *inv.Buyer.CountryCode,
+				AdresL1:  *inv.Buyer.AddressLine1,
 			}
 			if inv.Buyer.AddressLine2 != nil {
 				fa.Podmiot2.Adres.AdresL2 = *inv.Buyer.AddressLine2
@@ -305,23 +338,27 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			NrWierszaFa: fmt.Sprintf("%d", item.LineNumber),
 			UU_ID:       fmt.Sprintf("item-%d", item.LineNumber),
 			P_7:         item.Name,
-			P_11:        fmt.Sprintf("%.2f", item.NetAmount),
-			P_12:        string(item.TaxRate),
 		}
-		if item.Quantity != nil {
-			q := fmt.Sprintf("%.2f", *item.Quantity)
-			w.P_8B = &q
-		}
-		if item.UnitPriceNet != nil {
-			up := fmt.Sprintf("%.2f", *item.UnitPriceNet)
-			w.P_9A = &up
-		}
-		if item.Unit != nil {
-			w.P_8A = item.Unit
-		}
-		if inv.ExchangeRate != nil {
-			rate := fmt.Sprintf("%.6f", *inv.ExchangeRate)
-			w.KursWaluty = &rate
+		if inv.InvoiceType != InvoiceTypeUPR {
+			netAmount := fmt.Sprintf("%.2f", item.NetAmount)
+			taxRate := string(item.TaxRate)
+			w.P_11 = &netAmount
+			w.P_12 = &taxRate
+			if item.Quantity != nil {
+				quantity := fmt.Sprintf("%.2f", *item.Quantity)
+				w.P_8B = &quantity
+			}
+			if item.UnitPriceNet != nil {
+				unitPrice := fmt.Sprintf("%.2f", *item.UnitPriceNet)
+				w.P_9A = &unitPrice
+			}
+			if item.Unit != nil {
+				w.P_8A = item.Unit
+			}
+			if inv.ExchangeRate != nil {
+				rate := fmt.Sprintf("%.6f", *inv.ExchangeRate)
+				w.KursWaluty = &rate
+			}
 		}
 		fa.Fa.FaWiersz = append(fa.Fa.FaWiersz, w)
 	}

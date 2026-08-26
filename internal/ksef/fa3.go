@@ -32,15 +32,20 @@ type Podmiot1 struct {
 }
 
 type Podmiot2 struct {
-	DaneIdentyfikacyjne DaneIdentyfikacyjne `xml:"DaneIdentyfikacyjne"`
-	Adres               *Adres              `xml:"Adres"`
-	JST                 int                 `xml:"JST"`
-	GV                  int                 `xml:"GV"`
+	DaneIdentyfikacyjne DaneIdentyfikacyjnePodmiot2 `xml:"DaneIdentyfikacyjne"`
+	Adres               *Adres                      `xml:"Adres,omitempty"`
+	JST                 int                         `xml:"JST"`
+	GV                  int                         `xml:"GV"`
 }
 
 type DaneIdentyfikacyjne struct {
 	NIP   string `xml:"NIP"`
 	Nazwa string `xml:"Nazwa"`
+}
+
+type DaneIdentyfikacyjnePodmiot2 struct {
+	NIP   string  `xml:"NIP"`
+	Nazwa *string `xml:"Nazwa,omitempty"`
 }
 
 type Adres struct {
@@ -118,13 +123,13 @@ type DaneFaKorygowanej struct {
 
 type FaWiersz struct {
 	NrWierszaFa string  `xml:"NrWierszaFa"`
-	UU_ID       string  `xml:"UU_ID"`
-	P_7         string  `xml:"P_7"`            // nazwa produktyu
+	UU_ID       string  `xml:"UU_ID,omitempty"`
+	P_7         string  `xml:"P_7,omitempty"`  // nazwa produktu
 	P_8A        *string `xml:"P_8A,omitempty"` // jednostka
-	P_8B        *string `xml:"P_8B,omitempty"` // ilosc
+	P_8B        *string `xml:"P_8B,omitempty"` // ilość
 	P_9A        *string `xml:"P_9A,omitempty"` // cena netto/jednostka
-	P_11        string  `xml:"P_11"`           // wartosc netto
-	P_12        string  `xml:"P_12"`           // podatek
+	P_11        *string `xml:"P_11,omitempty"` // wartość netto
+	P_12        *string `xml:"P_12,omitempty"` // podatek
 	KursWaluty  *string `xml:"KursWaluty,omitempty"`
 }
 

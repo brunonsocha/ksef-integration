@@ -8,7 +8,6 @@ FROM debian:trixie-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y ca-certificates
 COPY --from=builder /app/ksef-integration .
-COPY ui ./ui
 RUN mkdir -p /app/data
 EXPOSE 8080
 CMD ["./ksef-integration"]

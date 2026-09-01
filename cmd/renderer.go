@@ -2,6 +2,7 @@ package main
 
 import (
 	"html/template"
+	uiassets "ksef-integration/ui"
 	"log"
 	"net/http"
 )
@@ -13,7 +14,7 @@ type renderer struct {
 
 func newRenderer(errorLog *log.Logger) *renderer {
 	return &renderer{
-		cache:    template.Must(template.ParseGlob("ui/html/*.html")),
+		cache:    template.Must(template.ParseFS(uiassets.Files, "html/*.html")),
 		errorLog: errorLog,
 	}
 }

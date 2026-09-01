@@ -2,3 +2,7 @@
 .air.toml
 tmp
 data
+.env
+config.yaml
+certs
+tailwindcss

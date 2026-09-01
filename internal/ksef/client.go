@@ -3,6 +3,7 @@ package ksef
 import (
 	"crypto/rsa"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Client struct {
 	SessionTokenValidity time.Time
 	RefreshToken         string
 	RefreshTokenValidity time.Time
+	mu sync.Mutex
 }
 
 func NewClient(nip, apiToken, apiURL string, httpTimeoutSec, authRetryDelaySec, pollingDelaySec int) *Client {

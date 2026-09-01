@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"ksef-integration/internal/ksef"
 	"ksef-integration/internal/models"
+	uiassets "ksef-integration/ui"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -56,8 +58,12 @@ type errorRes struct {
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /invoices", app.requireAPIKey(app.createInvoice))
-	fs := http.FileServer(http.Dir("./ui/static/"))
-	mux.Handle("/static/", http.StripPrefix("/static", fs))
+	staticFiles, err := fs.Sub(uiassets.Files, "static")
+	if err != nil {
+		panic(fmt.Errorf("embedded static files unavailable: %w", err))
+	}
+	staticHandler := http.FileServer(http.FS(staticFiles))
+	mux.Handle("/static/", http.StripPrefix("/static/", staticHandler))
 	mux.HandleFunc("GET /{$}", app.home)
 	mux.HandleFunc("GET /ui/invoices", app.requireDashboardAuth(app.getDashboard))
 	mux.HandleFunc("GET /ui/invoice", app.requireDashboardAuth(app.getDashboardInvoice))

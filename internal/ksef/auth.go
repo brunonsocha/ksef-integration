@@ -210,6 +210,9 @@ func (c *Client) Login() error {
 	}
 	tokenData := []byte(fmt.Sprintf("%s|%d", c.ApiToken, cha.TimestampMs))
 	encryptedToken, err := c.encryptWithPKey(tokenData, c.TokenPublicKey)
+	if err != nil {
+		return err
+	}
 	authRes, err := c.startSession(encryptedToken, cha)
 	if err != nil {
 		return err
@@ -226,6 +229,8 @@ func (c *Client) Login() error {
 }
 
 func (c *Client) checkToken() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if time.Until(c.SessionTokenValidity) < 2*time.Minute {
 		if err := c.refreshToken(); err != nil {
 			return c.Login()

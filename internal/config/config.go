@@ -15,32 +15,24 @@ type Config struct {
 		AuthRetryDelaySec       int    `yaml:"auth_retry_delay_sec"`
 		PollingDelaySec         int    `yaml:"polling_delay_sec"`
 		ConfirmationMaxAttempts int    `yaml:"confirmation_max_attempts"`
-		Form                    struct {
-			System_code    string `yaml:"system_code"`
-			Schema_version string `yaml:"schema_version"`
-			Value          string `yaml:"value"`
-		} `yaml:"form"`
 	} `yaml:"ksef"`
 	Sqlite struct {
 		Db_path       string `yaml:"db_path"`
 		BusyTimeoutMs int    `yaml:"busy_timeout_ms"`
 	} `yaml:"sqlite"`
 	Server struct {
-		Port string `yaml:"port"`
+		Port        string `yaml:"port"`
 		TLSCertPath string `yaml:"tls_cert_path"`
-		TLSKeyPath string `yaml:"tls_key_path"`
+		TLSKeyPath  string `yaml:"tls_key_path"`
 	}
-	Runonce struct {
-		Xml_path string `yaml:"xml_path"`
-	} `yaml:"runonce"`
 	User struct {
 		Max_retries int `yaml:"max_retries"`
 	} `yaml:"user"`
-	DashPageSize       int    `yaml:"dash_page_size"`
-	PollingInterval    int    `yaml:"polling_interval"`
-	ShutdownTimeoutSec int    `yaml:"shutdown_timeout_sec"`
-	SenderBatchSize    int    `yaml:"sender_batch_size"`
-	SenderWorkerLimit  int    `yaml:"sender_worker_limit"`
+	DashPageSize       int `yaml:"dash_page_size"`
+	PollingInterval    int `yaml:"polling_interval"`
+	ShutdownTimeoutSec int `yaml:"shutdown_timeout_sec"`
+	SenderBatchSize    int `yaml:"sender_batch_size"`
+	SenderWorkerLimit  int `yaml:"sender_worker_limit"`
 }
 
 // supposedly, passing in filepaths is a codesmell

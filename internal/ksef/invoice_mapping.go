@@ -122,7 +122,7 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 			return errors.New("unit price cannot be empty")
 		}
 		switch item.TaxRate {
-		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
+		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate3, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
 		default:
 			return errors.New("invalid tax rate (line items)")
 		}
@@ -152,11 +152,11 @@ func (i *InvoiceReceived) ValidateInvoiceReceived() error {
 	}
 	for _, taxbr := range i.TaxBreakdowns {
 		switch taxbr.TaxRate {
-		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
+		case TaxRate23, TaxRate22, TaxRate8, TaxRate7, TaxRate5, TaxRate4, TaxRate3, TaxRate0WDT, TaxRate0EX, TaxRate0KR, TaxRateZW, TaxRateOO, TaxRateNPI, TaxRateNPII:
 		default:
 			return errors.New("invalid tax rate (tax breakdown)")
 		}
-		taxable := taxbr.TaxRate == TaxRate23 || taxbr.TaxRate == TaxRate22 || taxbr.TaxRate == TaxRate8 || taxbr.TaxRate == TaxRate7 || taxbr.TaxRate == TaxRate5 || taxbr.TaxRate == TaxRate4
+		taxable := taxbr.TaxRate == TaxRate23 || taxbr.TaxRate == TaxRate22 || taxbr.TaxRate == TaxRate8 || taxbr.TaxRate == TaxRate7 || taxbr.TaxRate == TaxRate5 || taxbr.TaxRate == TaxRate4 || taxbr.TaxRate == TaxRate3
 		if *i.Currency != "PLN" && taxable && taxbr.TaxAmountPln == nil {
 			return errors.New("missing tax amount in PLN for foreign-currency invoice")
 		}
@@ -387,7 +387,7 @@ func TransformToXML(inv *InvoiceReceived) ([]byte, error) {
 			groupID = 1
 		case TaxRate8, TaxRate7:
 			groupID = 2
-		case TaxRate5:
+		case TaxRate5, TaxRate3:
 			groupID = 3
 		case TaxRate4:
 			groupID = 4

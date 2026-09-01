@@ -5,10 +5,6 @@ ksef:
     auth_retry_delay_sec: 2
     polling_delay_sec: 5
     confirmation_max_attempts: 15
-    form:
-        system_code: "FA (3)"
-        schema_version: "1-0E"
-        value: "FA"
 
 sqlite:
     db_path: "data/ksef-integration-test.db"
@@ -18,9 +14,6 @@ server:
     port: "8080"
     tls_cert_path: ""
     tls_key_path: ""
-
-runonce:
-    xml_path: ""
 
 user:
     max_retries: 5
